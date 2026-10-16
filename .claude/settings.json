@@ -7,6 +7,7 @@
       "Bash(git checkout -- .)",
       "Bash(git clean -fd*)",
       "Bash(rm -rf*)",
+      "Bash(docker compose down -v*)",
       "Read(.env)",
       "Read(.env.*)",
       "Read(**/*.pem)",
@@ -15,7 +16,8 @@
     "ask": [
       "Bash(git push*)",
       "Bash(git merge*)",
-      "Bash(git rebase*)"
+      "Bash(git rebase*)",
+      "Bash(docker compose down*)"
     ]
   }
 }
