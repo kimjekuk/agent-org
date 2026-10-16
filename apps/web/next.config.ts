@@ -1,5 +1,10 @@
+import fs from "node:fs";
 import path from "node:path";
 import type { NextConfig } from "next";
+
+// PC에서 pnpm dev 실행 시 루트 .env를 읽는다. (Docker에서는 compose가 환경변수를 넣고 .env는 이미지에 없음)
+const rootEnv = path.join(__dirname, "../../.env");
+if (fs.existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
 const nextConfig: NextConfig = {
   // standalone은 Docker 이미지용. Windows 로컬 빌드는 symlink 권한 문제로 실패하므로 Dockerfile에서만 켠다.

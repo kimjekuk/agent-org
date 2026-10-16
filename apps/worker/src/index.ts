@@ -13,7 +13,10 @@ const worker = new Worker(
 );
 
 worker.on("ready", () => console.log(`[worker] ${APP_NAME} 워커 준비됨 — 큐 "${AGENT_QUEUE}" 대기 중`));
-worker.on("error", (err) => console.error(`[worker] Redis 연결 오류: ${err.message}`));
+worker.on("error", (err) => {
+  const code = (err as { code?: string }).code;
+  console.error(`[worker] Redis 연결 오류: ${err.message || code || err.name}`);
+});
 
 async function shutdown(signal: string) {
   console.log(`[worker] ${signal} 수신 — 종료`);
