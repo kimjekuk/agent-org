@@ -1,8 +1,23 @@
+# 비밀값
 .env
 .env.*
+!.env.example
+*.env.local
 *.pem
 *.key
+
+# Node / Next.js
 node_modules/
-__pycache__/
-.venv/
+.next/
+next-env.d.ts
+dist/
+.turbo/
+*.tsbuildinfo
+*.log
+
+# Docker 데이터
+postgres-data/
+redis-data/
+
+# Claude Code 개인 설정
 .claude/settings.local.json
