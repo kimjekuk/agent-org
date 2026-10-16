@@ -66,6 +66,7 @@
 | 비용 방식 | 사용자 본인 API 키 등록 | 크레딧 판매는 4단계 |
 | 기술 스택 | **TypeScript 단일** — Next.js + Node 워커 + PostgreSQL + Redis, Docker Compose | 확정, 6장 참고 |
 | 배포 | **Docker Compose 자체 호스팅** — 오라클 클라우드 Always Free ARM VM 우선, 어느 VM이든 동일 | 확정, 12장 참고 |
+| 개발 방식 | **로컬 설치 없음** — Claude Code 웹/앱 + GitHub + 오라클 dev 서버 자동 배포. 확인은 휴대폰 브라우저 | 확정, PART 5-7 참고 |
 | 캐릭터 그래픽 | 2D 일러스트 SVG (파츠 조합식) | 추천값 |
 | MVP 도구 범위 | 웹 검색 + 문서 작성/요약 | 코드 실행은 2단계 |
 | 첫 조직 템플릿 | 콘텐츠 제작팀 (리더·리서처·작가·검수) | 4명 |
@@ -403,14 +404,15 @@ agent-org/                            ← pnpm 모노레포
 
 | 단계 | 범위 | 완료 기준 |
 |------|------|-----------|
-| 0 | 모노레포·Docker Compose·CLAUDE.md·settings.json·CI 뼈대 | `docker compose up`으로 web/worker/postgres/redis 기동, 빈 페이지 표시 |
+| 0-A | 모노레포·Docker Compose·CLAUDE.md·settings.json 뼈대 | 컨테이너 빌드 성공, 빈 페이지 표시 |
+| 0-B | 오라클 VM 세팅 + dev/운영 2스택 + GitHub Actions 자동 배포 | `dev` 푸시 → dev.도메인에 빈 페이지 자동 반영. 휴대폰에서 접속 확인 |
 | 1-A | F001, F002, 7장 스키마·마이그레이션 | 로그인 → 조직 생성 → API 키 암호화 저장 |
 | 1-B | shared/llm: gateway, provider(anthropic) / worker: guards / F013 CostLog | 단일 호출이 예산 체크·비용 기록을 거침. guards.test 통과 |
 | 1-C | F005, F009, F008 팀원 루프(에이전트 1명) | 에이전트 1명이 지시 받아 산출물 1개 생성·보고 |
 | 1-D | F014 긴급 정지, F015 AuditLog, SSE 이벤트 | 실행 중 긴급 정지 → 1턴 내 중단, 화면에 실시간 반영 |
 | 1-E | F006, F007 리더 루프, F010 칸반, F012 승인함 | 미션 1개를 4명 조직이 분배·완료 |
 | 1-F | F003 대시보드, F004 조직도, F011, F016, F017(하단 탭바·PWA·푸시) | **MVP 완료** — 첫 조직 템플릿으로 PC·모바일 모두 엔드투엔드 |
-| 1-G | 오라클 클라우드 배포 (12장) | 도메인으로 HTTPS 접속, 미션 1개 완주 |
+| 1-G | 운영 스택 첫 배포 (`dev → main` 머지) | 운영 도메인으로 HTTPS 접속, 미션 1개 완주 |
 | 2 | F101~F110 | 학습·회의·스케줄·품질·예외 처리 |
 | 3 | F201~F209 | 사무실 뷰·커스터마이징·연동·Git 연동 |
 | 4 | F301~F304 | 마켓·팀·요금제·업적 |
@@ -430,7 +432,13 @@ agent-org/                            ← pnpm 모노레포
 3. Docker + Docker Compose 설치, `git` 설치
 4. 도메인 DNS A 레코드 → VM 공인 IP
 
-**배포**
+**dev / 운영 2스택**
+- 한 VM에 `docker-compose.yml` + `docker-compose.prod.yml`(운영) / `docker-compose.dev.yml`(dev)로 두 벌 기동
+- 포트·볼륨·DB 이름을 분리 (예: `agentorg_dev`, `agentorg_prod`), Caddy가 `dev.도메인` / `도메인`으로 각각 라우팅
+- GitHub Actions: `dev` 브랜치 푸시 → SSH로 VM 접속 → `git pull && docker compose -f ... dev up -d --build` / `main` 푸시 → 운영 스택 동일
+- VM 접속 키는 GitHub Secrets에만 저장
+
+**최초 배포 (한 번, Claude Code가 준 명령을 복붙)**
 ```bash
 git clone <저장소> agent-org && cd agent-org
 cp .env.example .env && nano .env          # 비밀값 입력
@@ -439,9 +447,8 @@ docker compose up -d --build               # 5개 컨테이너 기동
 Caddy가 도메인으로 HTTPS 인증서를 자동 발급한다.
 
 **업데이트**
-```bash
-git pull && docker compose up -d --build
-```
+- 평소: GitHub Actions가 자동으로 처리 (dev 푸시 / main 머지)
+- 수동이 필요할 때만: `git pull && docker compose up -d --build`
 
 **백업**
 - cron으로 매일 `pg_dump` → Oracle Object Storage(또는 다른 저장소) 업로드
@@ -613,12 +620,12 @@ Docker 이미지는 linux/arm64 + linux/amd64 모두 빌드
 [x] 기술 스택: TypeScript 단일 + Docker Compose
 [x] 배포: 오라클 클라우드 (어느 VM이든 동일)
 [ ] GitHub 저장소 agent-org 생성 (비공개)
-[ ] 로컬 PC에 Docker Desktop, Node 20+, pnpm, Git 설치
 [ ] Claude API 키 발급 (.env에만 저장)
 [ ] 첫 조직 템플릿 4명의 이름·성격·특기 초안
 [ ] 캐릭터 파츠(머리/얼굴/색) 최소 세트 결정
-[ ] 도메인 (배포 단계 1-G 전까지만 있으면 됨)
-[ ] 오라클 클라우드 계정 + Always Free ARM VM (1-G 전까지)
+[ ] 도메인 1개 (dev.도메인 / 도메인 두 개로 씀) — 0-B 전까지
+[ ] 오라클 클라우드 계정 + Always Free ARM VM — 0-B 전까지
+[ ] Claude Code 웹/앱에 GitHub 저장소 연결
 ```
 
 ---
@@ -633,15 +640,16 @@ Docker 이미지는 linux/arm64 + linux/amd64 모두 빌드
 - 같은 실수가 반복되면 말로 고치지 말고 CLAUDE.md에 한 줄 추가한다.
 - 기획이 바뀌면 PRD.md를 먼저 고치고(`docs:` 커밋) 그다음 코드 지시.
 
-### 5-2. 처음 시작 (빈 폴더에서)
+### 5-2. 처음 시작 (로컬 설치 없이)
 
+1. GitHub에서 비공개 저장소 `agent-org` 생성 (README만 있는 빈 저장소)
+2. GitHub 웹 화면에서 파일 3개 추가·커밋:
 ```
-agent-org/
-├── CLAUDE.md               ← PART 3-7 내용 그대로
-├── .claude/settings.json   ← PART 3-6 내용 그대로
-└── docs/PRD.md             ← 이 문서
+CLAUDE.md               ← PART 3-7 내용 그대로
+.claude/settings.json   ← PART 3-6 내용 그대로
+docs/PRD.md             ← 이 문서
 ```
-위 3개만 만들고 `git init` → 첫 커밋 → Claude Code 실행.
+3. Claude Code 웹/앱에서 이 저장소를 연결하고 첫 지시(5-3) 시작
 
 ### 5-3. 첫 지시 (복사해서 사용)
 
@@ -671,19 +679,45 @@ F014 긴급 정지 구현해줘. 완료 기준: 실행 중 워커가 1턴 내 �
 
 ### 5-5. 매 단계 마무리 문장
 ```
-테스트 돌리고, 통과하면 feat(F0xx): … 형식으로 커밋해줘.
-그리고 내가 브라우저에서 뭘 확인하면 되는지 한 줄로 알려줘.
+테스트 돌리고, 통과하면 feat(F0xx): … 형식으로 커밋하고 dev 브랜치로 PR 올려줘.
+그리고 내가 휴대폰 브라우저에서 뭘 확인하면 되는지 한 줄로 알려줘.
 ```
-하루 마무리: `dev에 머지하고 push해줘.`
+PR을 머지하면 GitHub Actions가 dev 서버에 자동 배포 → 휴대폰으로 `dev.도메인` 접속해 확인.
+만족스러우면: `dev를 main에 머지해줘.` → 운영 서버 자동 배포.
 
 ### 5-6. 권장 첫 7개 명령 (순서대로)
 ```
-1. "docs/PRD.md 읽고 0단계 계획 보여줘" → 승인 → 실행
+1. "docs/PRD.md 읽고 0-A 계획 보여줘" → 승인 → 실행
+1-2. "0-B: 12장 보고 오라클 VM 세팅 명령을 순서대로 정리해줘 + GitHub Actions 배포 워크플로 작성해줘" → VM에서 복붙 1회
 2. "1-A: F001, F002, 7장 스키마. 계획 먼저"
 3. "1-B: gateway/guards/guards.test. PART 2 원칙 5 필수"
 4. "1-C: F005, F009, F008 팀원 루프. 에이전트 1명이 지시→산출물→보고까지"
 5. "1-D: F014 긴급 정지 + F015 AuditLog + SSE. 1턴 내 중단 테스트 포함"
 6. "1-E: F006, F007 리더 루프, F010 칸반, F012 승인함. 4명 조직이 미션 1개 완주"
 7. "1-F: F003, F004, F011, F016, F017(하단 탭바·PWA·푸시). PC와 휴대폰 둘 다 확인. MVP 완료"
-→ 이후 "1-G: docs/DEPLOY.md 보고 오라클 배포 준비. 내가 VM에서 실행할 명령을 순서대로 정리해줘"
+→ 이후 "1-G: dev를 main에 머지해줘" → 운영 자동 배포
 ```
+
+### 5-7. 원격 개발 흐름 (로컬 PC 불필요)
+
+```
+[휴대폰/PC 브라우저]
+   │ 지시
+   ▼
+Claude Code 웹/앱 ──PR──▶ GitHub (dev 브랜치) ──Actions 자동 배포──▶ 오라클 VM dev 스택
+   ▲                                                                       │
+   └──────────── 휴대폰 브라우저로 dev.도메인 접속해 확인 ◀───────────────────┘
+
+만족하면 "dev → main 머지" 지시 → 운영 스택 자동 배포
+```
+
+| 역할 | 어디서 |
+|------|--------|
+| 코드 작성·단위 테스트 | Claude Code 웹/앱의 클라우드 샌드박스 |
+| 실제 동작 확인 | 오라클 VM dev 스택 (휴대폰 브라우저) |
+| 운영 | 오라클 VM 운영 스택 (`main` 머지 때만 변경) |
+| 비상 시 서버 직접 확인 | SSH로 VM 접속 (평소엔 불필요) |
+
+- 비밀값(.env)은 GitHub에 올리지 않고 VM의 `.env` + GitHub Secrets(배포용 SSH 키)에만 둔다
+- 샌드박스에서는 Docker 전체를 띄우기 어려우므로 **통합 동작 확인은 반드시 dev 서버에서** 한다
+- 오라클 Free Tier ARM VM(4코어/24GB)이면 dev·운영 2스택을 한 대에 올려도 충분하다
