@@ -1,5 +1,6 @@
-# 로컬·운영 공통. 로컬 전용 설정은 docker-compose.override.yml (자동 적용).
-# Caddy(HTTPS 프록시)는 배포 단계(1-G)에서 추가한다.
+# dev·운영 공통 서비스 정의. 스택별 포트·볼륨·DB 이름은 0-B에서
+# docker-compose.dev.yml / docker-compose.prod.yml로 분리한다.
+# 외부 접속은 caddy(80번)만 연다. 나머지는 내부 네트워크에서만 통신.
 
 services:
   postgres:
@@ -62,6 +63,19 @@ services:
       redis:
         condition: service_healthy
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      web:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   redis-data:
+  caddy-data:
