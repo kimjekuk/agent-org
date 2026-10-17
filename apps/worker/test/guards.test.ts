@@ -30,7 +30,7 @@ function fakeProvider() {
     async complete(apiKey, req) {
       calls.push({ apiKey, req });
       // 입력 1,000 / 출력 1,000 토큰
-      return { text: "OK", model: req.model, stopReason: "end_turn", usage: [{ model: req.model, inputTokens: 1000, outputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0 }] };
+      return { text: "OK", model: req.model, stopReason: "end_turn", usage: [{ model: req.model, inputTokens: 1000, outputTokens: 1000, cacheWriteTokens: 0, cacheReadTokens: 0 }], webSearchRequests: 0, webSearchEnabled: false };
     },
   };
   return { provider, calls };

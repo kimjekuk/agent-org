@@ -15,7 +15,10 @@
     "./approval": "./src/approval.ts",
     "./llm/gateway": "./src/llm/gateway.ts",
     "./llm/pricing": "./src/llm/pricing.ts",
-    "./llm/provider": "./src/llm/provider.ts"
+    "./llm/provider": "./src/llm/provider.ts",
+    "./events": "./src/events.ts",
+    "./queue": "./src/queue.ts",
+    "./agents/templates": "./src/agents/templates.ts"
   },
   "scripts": {
     "typecheck": "tsc",
@@ -24,7 +27,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
+    "bullmq": "^5.81.5",
     "drizzle-orm": "0.45.4",
+    "ioredis": "^5.11.1",
     "postgres": "3.4.9"
   },
   "devDependencies": {

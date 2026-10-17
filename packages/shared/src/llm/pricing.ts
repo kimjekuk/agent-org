@@ -35,9 +35,12 @@ export function assertKnownModel(model: string) {
   if (!PRICES[model]) throw new Error(`요금표에 없는 모델입니다: ${model}`);
 }
 
-/** 시도별 사용량의 원화 비용 합계. 캐시 쓰기는 입력 요금의 1.25배. */
-export function costKrw(usage: LLMUsageIteration[], rate = usdToKrwRate()): number {
-  let usd = 0;
+/** 웹 검색 1회 요금 ($10 / 1,000회) */
+export const WEB_SEARCH_USD = 0.01;
+
+/** 시도별 사용량 + 웹 검색 횟수의 원화 비용 합계. 캐시 쓰기는 입력 요금의 1.25배. */
+export function costKrw(usage: LLMUsageIteration[], rate = usdToKrwRate(), webSearchRequests = 0): number {
+  let usd = webSearchRequests * WEB_SEARCH_USD;
   for (const u of usage) {
     const p = PRICES[u.model];
     if (!p) throw new Error(`요금표에 없는 모델입니다: ${u.model}`);

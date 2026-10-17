@@ -31,6 +31,10 @@ describe("비용 계산 (원화, 1달러 = 1,400원)", () => {
     expect(costKrw(usage, 1)).toBeCloseTo(4, 6);
   });
 
+  it("웹 검색은 1회 $0.01 (14원)", () => {
+    expect(costKrw([], 1400, 3)).toBeCloseTo(42, 6);
+  });
+
   it("요금표에 없는 모델은 비용을 기록할 수 없으므로 오류", () => {
     expect(() => costKrw([u("unknown-model", 1, 1)], 1)).toThrow(/요금표/);
   });
