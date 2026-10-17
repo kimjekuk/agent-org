@@ -1,3 +1,5 @@
+import { getDb, schema } from "@agentorg/shared/db";
+import { and, count, eq } from "drizzle-orm";
 import Link from "next/link";
 import { EmergencyBanner, EmergencyStopButton } from "@/components/EmergencyStop";
 import { LiveRefresh } from "@/components/LiveRefresh";
@@ -7,6 +9,8 @@ import { requireUser } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 const NAV = [
+  { href: "/missions", label: "미션" },
+  { href: "/approvals", label: "승인함" },
   { href: "/agents", label: "에이전트" },
   { href: "/audit", label: "로그" },
   { href: "/settings", label: "설정" },
@@ -16,6 +20,13 @@ const NAV = [
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const org = await getCurrentOrg(user.id);
+  // 승인함 배지: 기다리는 요청 수 (PRD 4장)
+  const [pending] = org
+    ? await getDb()
+        .select({ n: count() })
+        .from(schema.approvalRequests)
+        .where(and(eq(schema.approvalRequests.orgId, org.id), eq(schema.approvalRequests.status, "PENDING")))
+    : [];
 
   return (
     <div className="min-h-screen">
@@ -30,8 +41,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         <nav className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-2 pb-2">
           {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className="flex h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10">
+            <Link key={n.href} href={n.href} className="flex h-11 shrink-0 items-center rounded-lg px-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10">
               {n.label}
+              {n.href === "/approvals" && pending?.n ? (
+                <span className="ml-1 rounded-full bg-red-600 px-1.5 text-xs leading-5 text-white" aria-label={`대기 ${pending.n}건`}>
+                  {pending.n}
+                </span>
+              ) : null}
             </Link>
           ))}
         </nav>

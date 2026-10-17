@@ -4,8 +4,8 @@
 import { writeAudit } from "@agentorg/shared/audit";
 import { getDb, schema } from "@agentorg/shared/db";
 import { publishOrgEvent } from "@agentorg/shared/events";
-import { enqueueAgentRun } from "@agentorg/shared/queue";
-import { and, eq, isNull } from "drizzle-orm";
+import { agentsWithPendingDirectives, enqueueAgentRun } from "@agentorg/shared/queue";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getOwnedOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
@@ -46,12 +46,8 @@ export async function resumeOrg(orgId: string) {
     });
   });
 
-  // 멈춰 있던 동안 남은 지시가 있는 에이전트들을 다시 깨운다
-  const waiting = await db
-    .selectDistinct({ agentId: schema.messages.receiverAgentId })
-    .from(schema.messages)
-    .where(and(eq(schema.messages.orgId, orgId), eq(schema.messages.type, "DIRECTIVE"), isNull(schema.messages.readAt)));
-  for (const w of waiting) if (w.agentId) await enqueueAgentRun({ orgId, agentId: w.agentId });
+  // 멈춰 있던 동안 남은 지시(리더가 검토할 보고 포함)가 있는 에이전트들을 다시 깨운다
+  for (const job of await agentsWithPendingDirectives(db, orgId)) await enqueueAgentRun(job);
 
   await publishOrgEvent(orgId, { type: "org" });
   revalidatePath("/", "layout");

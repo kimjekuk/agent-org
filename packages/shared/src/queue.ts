@@ -40,7 +40,7 @@ export async function enqueueAgentRun(job: RunAgentJob): Promise<boolean> {
  * 처리할 일이 남은 에이전트들: 읽지 않은 지시, 또는 리더가 검토할 Task 보고.
  * 긴급 정지 중인 조직과 일시정지·취소된 미션은 제외한다.
  */
-export async function agentsWithPendingDirectives(db: AnyDb): Promise<RunAgentJob[]> {
+export async function agentsWithPendingDirectives(db: AnyDb, orgId?: string): Promise<RunAgentJob[]> {
   const rows = await db
     .selectDistinct({ orgId: messages.orgId, agentId: messages.receiverAgentId })
     .from(messages)
@@ -48,6 +48,7 @@ export async function agentsWithPendingDirectives(db: AnyDb): Promise<RunAgentJo
     .leftJoin(missions, eq(missions.id, messages.missionId))
     .where(
       and(
+        orgId ? eq(messages.orgId, orgId) : undefined,
         isNull(messages.readAt),
         isNotNull(messages.receiverAgentId),
         eq(organizations.emergencyStop, false),
