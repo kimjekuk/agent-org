@@ -12,10 +12,10 @@ export const FACE_NAMES = ["웃음", "진지", "놀람", "윙크"] as const;
 export const COLOR_NAMES = ["노랑", "분홍", "하늘", "연두", "보라", "주황"] as const;
 
 /** 도구 권한 (PRD F005: 기본 OFF). MVP 도구: 웹 검색 + 문서 작성 */
-export interface ToolPermissions {
+export type ToolPermissions = {
   web_search?: boolean;
   document?: boolean;
-}
+};
 export const TOOL_NAMES: Record<keyof ToolPermissions, string> = { web_search: "웹 검색", document: "문서 작성 (산출물 저장)" };
 
 export interface AgentTemplate {

@@ -75,7 +75,7 @@ export const agents = pgTable("agents", {
   modelPrimary: text("model_primary"),
   modelEconomy: text("model_economy"),
   maxTurns: integer("max_turns").notNull().default(20),
-  toolPermissions: jsonb("tool_permissions").$type<Record<string, boolean>>().notNull().default({}),
+  toolPermissions: jsonb("tool_permissions").$type<Partial<Record<string, boolean>>>().notNull().default({}),
   budgetLimit: integer("budget_limit"),
   autonomy: autonomy("autonomy"), // null → 조직 기본값
   status: text("status").$type<AgentStatus>().notNull().default("IDLE"),

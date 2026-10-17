@@ -6,6 +6,13 @@ export const DEFAULT_MODELS = {
   economy: "claude-haiku-5-5", // 절약용: 예산 80% 이상에서 자동 전환
 } as const;
 
+/** 에이전트 프로필에서 고를 수 있는 모델 (요금: 입력/출력 100만 토큰당) */
+export const MODEL_CHOICES = [
+  { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 — 균형 ($2 / $10)" },
+  { id: "claude-haiku-5-5", label: "Claude Haiku 5.5 — 절약 ($0.10 / $0.50)" },
+  { id: "claude-opus-5-5", label: "Claude Opus 5.5 — 고급 ($4 / $20)" },
+] as const;
+
 interface Price {
   input: number;
   output: number;

@@ -20,6 +20,9 @@ importers:
       '@agentorg/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      bullmq:
+        specifier: ^5.81.5
+        version: 5.81.5
       drizzle-orm:
         specifier: 0.45.4
         version: 0.45.4(@electric-sql/pglite@0.5.10)(@opentelemetry/api@1.9.1)(postgres@3.4.9)

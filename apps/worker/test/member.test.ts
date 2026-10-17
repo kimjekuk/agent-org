@@ -5,6 +5,7 @@ import * as schema from "@agentorg/shared/db/schema";
 import type { LLMProvider, LLMRequest } from "@agentorg/shared/llm/provider";
 import { and, eq, isNull } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { agentsWithPendingDirectives } from "@agentorg/shared/queue";
 import { runAgent } from "../src/loops/member";
 import { createTestDb, seed } from "./testDb";
 
@@ -178,5 +179,15 @@ describe("F014 긴급 정지 — 실행 중에 켜면 1턴 안에 멈춘다", ()
     expect(r).toEqual({ turns: 1, stopped: "MAX_TURNS" });
     const reports = await db.select().from(schema.messages).where(eq(schema.messages.type, "REPORT"));
     expect(reports.some((m) => m.content.includes("최대 턴 수") && m.receiverAgentId === leader.id)).toBe(true);
+  });
+});
+
+describe("작업 유실 방지 — 주기 점검", () => {
+  it("처리 안 된 지시가 있는 에이전트를 찾되, 긴급 정지 중인 조직은 빼고 찾는다", async () => {
+    expect(await agentsWithPendingDirectives(db)).toEqual([]);
+    await userDirective("남은 지시");
+    expect(await agentsWithPendingDirectives(db)).toEqual([{ orgId: ctx.org.id, agentId: ctx.agent.id }]);
+    await db.update(schema.organizations).set({ emergencyStop: true }).where(eq(schema.organizations.id, ctx.org.id));
+    expect(await agentsWithPendingDirectives(db)).toEqual([]);
   });
 });

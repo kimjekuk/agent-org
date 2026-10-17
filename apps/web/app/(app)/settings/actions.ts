@@ -10,11 +10,11 @@ import { DEFAULT_MODELS } from "@agentorg/shared/llm/pricing";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { getCurrentOrg, ORG_COOKIE } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 
 export type ActionResult = { error?: string; ok?: string } | undefined;
 
-const ORG_COOKIE = "org";
 const PROVIDERS = ["anthropic"] as const; // OpenAI·Gemini 어댑터는 이후 단계
 
 function orgName(form: FormData): string | null {
@@ -184,15 +184,9 @@ export type TestResult = { error?: string; reply?: string; costKrw?: number; tod
 
 export async function testConnection(): Promise<TestResult> {
   const user = await requireUser();
-  const orgId = (await cookies()).get(ORG_COOKIE)?.value;
   const db = getDb();
-  const [org] = orgId
-    ? await db
-        .select({ id: schema.organizations.id, budgetDaily: schema.organizations.budgetDaily })
-        .from(schema.organizations)
-        .where(and(eq(schema.organizations.id, orgId), eq(schema.organizations.ownerId, user.id)))
-    : [];
-  if (!org) return { error: "먼저 조직을 선택해 주세요 (비용은 조직 예산에 기록됩니다)" };
+  const org = await getCurrentOrg(user.id);
+  if (!org) return { error: "먼저 조직을 만들어 주세요 (비용은 조직 예산에 기록됩니다)" };
 
   try {
     const r = await callLLM(db, {

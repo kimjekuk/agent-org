@@ -1,9 +1,9 @@
 import { getDb, schema } from "@agentorg/shared/db";
 import { asc, eq } from "drizzle-orm";
-import { cookies } from "next/headers";
+import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonDanger, buttonGhost, card } from "@/lib/ui";
-import { logout } from "../login/actions";
+import { logout } from "@/app/login/actions";
 import { deleteApiKey, deleteOrg, selectOrg } from "./actions";
 import { ApiKeyForm, CreateOrgForm, RenameOrgForm, TestConnectionForm } from "./forms";
 
@@ -24,7 +24,7 @@ export default async function SettingsPage() {
     .select({ provider: schema.apiKeys.provider, createdAt: schema.apiKeys.createdAt })
     .from(schema.apiKeys)
     .where(eq(schema.apiKeys.userId, user.id));
-  const currentOrgId = (await cookies()).get("org")?.value;
+  const currentOrgId = (await getCurrentOrg(user.id))?.id;
   const anthropicKey = keys.find((k) => k.provider === "anthropic");
 
   return (
