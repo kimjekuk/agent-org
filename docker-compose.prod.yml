@@ -1,0 +1,7 @@
+# 운영 스택 (main 브랜치, /opt/agentorg/prod). Tailscale serve HTTPS 8443 → 127.0.0.1:3100
+name: agentorg-prod
+
+services:
+  web:
+    ports:
+      - "127.0.0.1:3100:3000"

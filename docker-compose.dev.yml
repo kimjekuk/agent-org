@@ -1,0 +1,7 @@
+# dev 스택 (dev 브랜치, /opt/agentorg/dev). Tailscale serve HTTPS 10000 → 127.0.0.1:3200
+name: agentorg-dev
+
+services:
+  web:
+    ports:
+      - "127.0.0.1:3200:3000"

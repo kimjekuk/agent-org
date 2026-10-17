@@ -1,6 +1,6 @@
-# dev·운영 공통 서비스 정의. 스택별 포트·볼륨·DB 이름은 0-B에서
-# docker-compose.dev.yml / docker-compose.prod.yml로 분리한다.
-# 외부 접속은 caddy(80번)만 연다. 나머지는 내부 네트워크에서만 통신.
+# dev·운영 공통 서비스 정의 (4개). 단독으로 쓰지 않고 스택 파일과 함께 실행한다:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# 호스트 포트는 스택 파일에서 web만 127.0.0.1에 연다. postgres·redis는 내부 네트워크 전용.
 
 services:
   postgres:
@@ -63,19 +63,6 @@ services:
       redis:
         condition: service_healthy
 
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-    depends_on:
-      web:
-        condition: service_healthy
-
 volumes:
   postgres-data:
   redis-data:
-  caddy-data:

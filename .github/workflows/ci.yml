@@ -42,19 +42,20 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 
   compose:
-    name: compose up → 빈 페이지 확인
+    name: compose up (dev 스택) → 빈 페이지 확인
     runs-on: ubuntu-latest
     env:
-      POSTGRES_DB: agentorg
+      COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
+      POSTGRES_DB: agentorg_dev
       POSTGRES_USER: agentorg
       POSTGRES_PASSWORD: ci-only-password
     steps:
       - uses: actions/checkout@v4
       - run: docker compose up -d --build --wait --wait-timeout 300
-      - name: 빈 페이지 (caddy → web)
-        run: curl -fsS http://localhost/ | grep -o "<h1[^>]*>AgentOrg"
+      - name: 빈 페이지 (127.0.0.1:3200)
+        run: curl -fsS http://127.0.0.1:3200/ | grep -o "<h1[^>]*>AgentOrg"
       - name: DB·Redis 연결
-        run: curl -fsS http://localhost/api/health | tee /dev/stderr | grep -q '"db":"ok","redis":"ok"'
+        run: curl -fsS http://127.0.0.1:3200/api/health | tee /dev/stderr | grep -q '"db":"ok","redis":"ok"'
       - name: worker 기동 로그
         run: |
           for i in $(seq 1 15); do
