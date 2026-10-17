@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+jobs:
+  check:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  images:
+    name: image build (${{ matrix.app }}, arm64+amd64)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [web, worker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  compose:
+    name: compose up (dev 스택) → 빈 페이지 확인
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
+      POSTGRES_DB: agentorg_dev
+      POSTGRES_USER: agentorg
+      POSTGRES_PASSWORD: ci-only-password
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --build --wait --wait-timeout 300
+      - name: 빈 페이지 (127.0.0.1:3200)
+        run: curl -fsS http://127.0.0.1:3200/ | grep -o "<h1[^>]*>AgentOrg"
+      - name: DB·Redis 연결
+        run: curl -fsS http://127.0.0.1:3200/api/health | tee /dev/stderr | grep -q '"db":"ok","redis":"ok"'
+      - name: worker 기동 로그
+        run: |
+          for i in $(seq 1 15); do
+            docker compose logs worker | grep "워커 준비됨" && exit 0
+            sleep 2
+          done
+          exit 1
+      - if: failure()
+        run: docker compose ps && docker compose logs --tail 100
