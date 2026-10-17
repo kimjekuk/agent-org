@@ -7,6 +7,8 @@ export type OrgEvent =
   | { type: "artifact"; agentId?: string | null }
   | { type: "agent"; agentId: string }
   | { type: "org" } // 긴급 정지·재개 등 조직 상태
+  | { type: "mission"; missionId: string } // 미션·Task 상태
+  | { type: "approval" } // 승인 대기함
   | { type: "audit" };
 
 export const orgChannel = (orgId: string) => `org:${orgId}:events`;

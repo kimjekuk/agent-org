@@ -18,7 +18,8 @@
     "./llm/provider": "./src/llm/provider.ts",
     "./events": "./src/events.ts",
     "./queue": "./src/queue.ts",
-    "./agents/templates": "./src/agents/templates.ts"
+    "./agents/templates": "./src/agents/templates.ts",
+    "./missions": "./src/missions.ts"
   },
   "scripts": {
     "typecheck": "tsc",
