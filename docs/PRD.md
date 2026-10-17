@@ -1,7 +1,8 @@
 # AgentOrg PRD + Claude Code 개발 가이드라인
-> **Claude Code 전용 통합 문서** | 버전 1.1 | 2026-10-17
+> **Claude Code 전용 통합 문서** | 버전 1.2 | 2026-10-17
 > AI 에이전트 조직 운영 웹사이트 — 캐릭터 에이전트들이 조직처럼 자율 협업하되, 사용자가 절대 통제권을 가진다.
 > v1.1 변경: 기술 스택을 TypeScript 단일 스택 + Docker Compose 자체 호스팅(오라클 클라우드 등 어느 VM에나 배포)으로 확정. Claude Code 전달 가이드(PART 5) 추가.
+> v1.2 변경: 배포를 기존 오라클 ARM VM(JStudio 동거) + Tailscale serve(도메인 없음)로 확정. 컨테이너 4개(caddy는 일반 공개 시 추가), 127.0.0.1 바인딩, VM pull 방식 자동 배포(systemd 타이머).
 
 ---
 
@@ -65,8 +66,8 @@
 | 1차 타깃 | 본인 전용 (단일 사용자) | 로그인은 넣되 회원가입 비공개 |
 | 비용 방식 | 사용자 본인 API 키 등록 | 크레딧 판매는 4단계 |
 | 기술 스택 | **TypeScript 단일** — Next.js + Node 워커 + PostgreSQL + Redis, Docker Compose | 확정, 6장 참고 |
-| 배포 | **Docker Compose 자체 호스팅** — 오라클 클라우드 Always Free ARM VM 우선, 어느 VM이든 동일 | 확정, 12장 참고 |
-| 개발 방식 | **로컬 설치 없음** — Claude Code 웹/앱 + GitHub + 오라클 dev 서버 자동 배포. 확인은 휴대폰 브라우저 | 확정, PART 5-7 참고 |
+| 배포 | **Docker Compose 자체 호스팅** — 기존 오라클 ARM VM(JStudio와 동거), 접속·HTTPS는 Tailscale serve, 도메인 없음 | 확정, 12장 참고 |
+| 개발 방식 | **로컬 설치 없음** — Claude Code 웹/앱 + GitHub + 오라클 dev 스택 자동 배포(VM pull). 확인은 휴대폰 브라우저 | 확정, PART 5-7 참고 |
 | 캐릭터 그래픽 | 2D 일러스트 SVG (파츠 조합식) | 추천값 |
 | MVP 도구 범위 | 웹 검색 + 문서 작성/요약 | 코드 실행은 2단계 |
 | 첫 조직 템플릿 | 콘텐츠 제작팀 (리더·리서처·작가·검수) | 4명 |
@@ -276,9 +277,9 @@ DB          : PostgreSQL 16 (JSONB로 에이전트 설정·메시지 본문 저�
 LLM         : @anthropic-ai/sdk 기본. packages/shared/llm/ 에 Provider 인터페이스 → OpenAI/Gemini 어댑터
               모든 호출은 gateway.ts 하나로만 (예산 체크 + CostLog 기록)
 암호화      : API 키는 AES-256-GCM으로 암호화 저장 (키는 .env의 ENCRYPTION_KEY)
-프록시      : Caddy (HTTPS 자동 발급, 도메인 연결)
+접속·HTTPS  : Tailscale serve (tailnet 전용, 운영 8443 / dev 10000). 일반 공개 시 Caddy + 도메인 추가 (12장)
 패키지 관리 : pnpm 워크스페이스 모노레포
-컨테이너    : Docker Compose — web / worker / postgres / redis / caddy (5개)
+컨테이너    : Docker Compose — web / worker / postgres / redis (4개). 포트는 127.0.0.1에만 바인딩
 ```
 
 **선정 이유**: 언어 1개라 비개발자가 에러를 따라가기 쉬움. 관리형 서비스(Supabase 등)에 묶이지 않아 오라클·AWS·GCP·네이버 어디든 `docker compose up` 한 번으로 동일하게 배포. 에이전트가 사용자 미접속 중에도 일하려면 상시 워커가 필수인데, BullMQ가 재시도·스케줄·일시정지를 기본 제공.
@@ -324,11 +325,12 @@ agent-org/                            ← pnpm 모노레포
 ├── .claude/settings.json             ← 권한 거부 규칙 (PART 3-6)
 ├── docs/
 │   ├── PRD.md                        ← 이 문서
-│   ├── DEPLOY.md                     ← 오라클 배포 절차 (12장을 옮겨 둠)
+│   ├── DEPLOY.md                     ← VM 설치 절차 (복붙용 명령)
+│   ├── Caddyfile.example             ← 일반 공개 시 사용할 Caddy 초안 (12장 향후)
 │   └── CHANGELOG.md
 ├── docker-compose.yml                ← dev·운영 공통 (서비스 정의)
 ├── docker-compose.dev.yml / docker-compose.prod.yml  ← dev·운영 스택별 포트·볼륨·DB 이름 (12장, 0-B)
-├── Caddyfile
+├── deploy/                          ← deploy.sh + systemd 타이머 (VM pull 자동 배포)
 ├── .env.example
 ├── .gitignore
 ├── package.json / pnpm-workspace.yaml / turbo.json
@@ -394,7 +396,7 @@ agent-org/                            ← pnpm 모노레포
 | 비용 | 모든 LLM 호출은 gateway.ts 경유. 우회 호출 금지. 한도 초과 시 자동 중단 |
 | 지속성 | 사용자 미접속 중에도 워커가 작업 지속. 컨테이너 재시작 시 BullMQ 작업 재개 |
 | 이식성 | 관리형 서비스 의존 없음. `docker compose up`으로 어느 VM에서든 동일 동작. ARM64·AMD64 이미지 모두 빌드 |
-| 보안 | API 키 암호화 저장, .env 미커밋, 업로드 자료 조직 외부 비공개, Caddy HTTPS |
+| 보안 | API 키 암호화 저장, .env 미커밋, 업로드 자료 조직 외부 비공개, 포트는 127.0.0.1만 바인딩, 접속은 Tailscale(HTTPS) |
 | 데이터 | 조직 데이터 JSON 전체 내보내기, 계정 삭제 시 완전 삭제, 매일 DB 덤프 백업 |
 | 안전 | 유해·불법·개인정보 콘텐츠 필터, 결과물 "AI 생성" 표시 옵션 |
 | 모바일 | 모바일 우선 설계. 375 / 768 / 1280px. 지시·승인·결과·긴급 정지 4가지는 모바일에서 PC와 동일 동작. PWA 설치·웹 푸시 지원 |
@@ -405,14 +407,14 @@ agent-org/                            ← pnpm 모노레포
 | 단계 | 범위 | 완료 기준 |
 |------|------|-----------|
 | 0-A | 모노레포·Docker Compose·CLAUDE.md·settings.json 뼈대 | 컨테이너 빌드 성공, 빈 페이지 표시 |
-| 0-B | 오라클 VM 세팅 + dev/운영 2스택 + GitHub Actions 자동 배포 | `dev` 푸시 → dev.도메인에 빈 페이지 자동 반영. 휴대폰에서 접속 확인 |
+| 0-B | 기존 VM에 Docker 설치 + dev/운영 2스택 + 타이머 자동 배포 + Tailscale serve | `dev` 푸시 → `https://<서버>.ts.net:10000`에 빈 페이지 자동 반영. 휴대폰에서 접속 확인. JStudio 정상 동작 유지 |
 | 1-A | F001, F002, 7장 스키마·마이그레이션 | 로그인 → 조직 생성 → API 키 암호화 저장 |
 | 1-B | shared/llm: gateway, provider(anthropic) / worker: guards / F013 CostLog | 단일 호출이 예산 체크·비용 기록을 거침. guards.test 통과 |
 | 1-C | F005, F009, F008 팀원 루프(에이전트 1명) | 에이전트 1명이 지시 받아 산출물 1개 생성·보고 |
 | 1-D | F014 긴급 정지, F015 AuditLog, SSE 이벤트 | 실행 중 긴급 정지 → 1턴 내 중단, 화면에 실시간 반영 |
 | 1-E | F006, F007 리더 루프, F010 칸반, F012 승인함 | 미션 1개를 4명 조직이 분배·완료 |
 | 1-F | F003 대시보드, F004 조직도, F011, F016, F017(하단 탭바·PWA·푸시) | **MVP 완료** — 첫 조직 템플릿으로 PC·모바일 모두 엔드투엔드 |
-| 1-G | 운영 스택 첫 배포 (`dev → main` 머지) | 운영 도메인으로 HTTPS 접속, 미션 1개 완주 |
+| 1-G | 운영 스택 MVP 배포 (`dev → main` 머지) | `https://<서버>.ts.net:8443` 접속, 미션 1개 완주 |
 | 2 | F101~F110 | 학습·회의·스케줄·품질·예외 처리 |
 | 3 | F201~F209 | 사무실 뷰·커스터마이징·연동·Git 연동 |
 | 4 | F301~F304 | 마켓·팀·요금제·업적 |
@@ -424,39 +426,49 @@ agent-org/                            ← pnpm 모노레포
 - 미션 기본 예산 초기값: 5,000원 / 조직 일 한도 초기값: 20,000원 (MVP 측정 후 보정)
 - 서버비: 오라클 Always Free 범위에서 MVP~2단계 **0원** 목표. 실비용은 LLM API뿐
 
-### 12. 배포 — 오라클 클라우드 (다른 클라우드도 동일)
+### 12. 배포 — 기존 오라클 ARM VM + Tailscale (도메인 없음)
 
-**VM 준비 (한 번)**
-1. Oracle Cloud Always Free: Ampere A1 (ARM, 최대 4 OCPU / 24GB), Ubuntu 22.04
-2. 보안 목록(방화벽)에서 80, 443 포트 열기
-3. Docker + Docker Compose 설치, `git` 설치
-4. 도메인 DNS A 레코드 → VM 공인 IP
+**전제 (2026-10-17 서버 확인)**
+- 새 서버를 만들지 않고 **JStudio가 돌고 있는 기존 오라클 VM**에 함께 올린다: Ampere A1 (aarch64), 4코어 / 24GB, Ubuntu 24.04
+- 접속·HTTPS는 **Tailscale serve**가 담당한다. 같은 Tailscale 네트워크(tailnet)의 기기에서만 열리고, 인터넷에는 공개하지 않는다
+- 기존 점유 (건드리지 않음): JStudio `8000`, 서버 PostgreSQL `127.0.0.1:5432`, Tailscale HTTPS `443` → JStudio
+
+**포트 배정**
+
+| 스택 | 브랜치 | web 컨테이너 | Tailscale serve | 접속 주소 |
+|------|--------|--------------|-----------------|-----------|
+| 운영 | `main` | `127.0.0.1:3100` | HTTPS `8443` | `https://<서버>.ts.net:8443` |
+| dev | `dev` | `127.0.0.1:3200` | HTTPS `10000` | `https://<서버>.ts.net:10000` |
+
+- 모든 포트는 **127.0.0.1에만** 바인딩한다. 인터넷에 직접 노출 금지
+- postgres·redis는 호스트 포트를 열지 않는다 (컨테이너 내부 네트워크에서만 통신)
 
 **dev / 운영 2스택**
-- 한 VM에 `docker-compose.yml` + `docker-compose.prod.yml`(운영) / `docker-compose.dev.yml`(dev)로 두 벌 기동
-- 포트·볼륨·DB 이름을 분리 (예: `agentorg_dev`, `agentorg_prod`), Caddy가 `dev.도메인` / `도메인`으로 각각 라우팅
-- GitHub Actions: `dev` 브랜치 푸시 → SSH로 VM 접속 → `git pull && docker compose -f ... dev up -d --build` / `main` 푸시 → 운영 스택 동일
-- VM 접속 키는 GitHub Secrets에만 저장
+- 컨테이너 4개: web / worker / postgres / redis
+- `docker-compose.yml`(공통) + `docker-compose.dev.yml` / `docker-compose.prod.yml`(스택별 프로젝트 이름·포트)
+- 폴더 분리: `/opt/agentorg/dev`(`dev` 브랜치), `/opt/agentorg/prod`(`main` 브랜치). 각 폴더에 `.env`를 따로 둔다 (DB 이름 `agentorg_dev` / `agentorg_prod`)
+- 볼륨은 compose 프로젝트 이름(`agentorg-dev` / `agentorg-prod`)으로 자동 분리된다
 
-**최초 배포 (한 번, Claude Code가 준 명령을 복붙)**
-```bash
-git clone <저장소> agent-org && cd agent-org
-cp .env.example .env && nano .env          # 비밀값 입력
-docker compose up -d --build               # 5개 컨테이너 기동
-```
-Caddy가 도메인으로 HTTPS 인증서를 자동 발급한다.
+**자동 배포 — VM이 가져가는 방식 (pull)**
+- systemd 타이머 `agentorg-deploy@dev.timer` / `agentorg-deploy@prod.timer`가 2분마다 `deploy/deploy.sh` 실행
+- `deploy.sh`: `git fetch` → 새 커밋이 있으면 `git pull --ff-only` → `docker compose up -d --build`
+- 저장소 읽기는 **읽기 전용 Deploy key**(VM에서 생성, GitHub 저장소 설정에 등록). GitHub에서 VM으로 들어오는 접속은 없다
+- 배포 기록 확인: `journalctl -u agentorg-deploy@dev -n 50`
 
-**업데이트**
-- 평소: GitHub Actions가 자동으로 처리 (dev 푸시 / main 머지)
-- 수동이 필요할 때만: `git pull && docker compose up -d --build`
+**설치 절차**: `docs/DEPLOY.md` (복붙용 명령)
 
 **백업**
 - cron으로 매일 `pg_dump` → Oracle Object Storage(또는 다른 저장소) 업로드
 - `.env`는 별도 안전한 곳에 보관
 
 **주의**
-- ARM VM이므로 Dockerfile은 `linux/arm64`와 `linux/amd64` 모두 빌드 가능해야 함 (Node·Postgres·Redis·Caddy 공식 이미지 모두 지원)
-- 다른 클라우드로 옮길 때는 VM 생성 + 위 "배포" 절차만 반복
+- 서버에서 직접 빌드하므로 arm64로 빌드된다. CI는 arm64·amd64 둘 다 빌드되는지 확인한다 (다른 클라우드 이전 대비)
+- JStudio의 서비스·포트·Tailscale 443 설정은 절대 바꾸지 않는다
+
+**향후: 일반 공개 (설계만, 지금은 구현하지 않음)**
+- 도메인 구입 → DNS A 레코드 → VM 공인 IP, 오라클 보안 목록에서 80·443 개방
+- compose에 caddy 서비스 추가, `Caddyfile`에 `도메인 → web` / `dev.도메인 → dev web` (초안: `docs/Caddyfile.example`)
+- Caddy가 HTTPS 인증서를 자동 발급. Tailscale serve는 관리용으로 유지 가능
 
 ---
 
@@ -536,7 +548,7 @@ chore: docker-compose redis 버전 고정
 
 ### 3-4. 태그·배포
 - 단계 완료 태그: `v0.1-mvp`, `v0.2-learning`, `v0.3-visual`, `v0.4-expand`
-- `main` 푸시 시 GitHub Actions로 테스트 (2단계 이후 자동 배포 도입)
+- PR·`dev`·`main` 푸시 시 GitHub Actions로 테스트. 배포는 VM 타이머가 `dev`·`main`을 가져가 자동 반영 (12장)
 - `docs/CHANGELOG.md`에 태그별 변경 기록
 
 ### 3-5. Claude Code 연동 규칙
@@ -600,8 +612,8 @@ chore: docker-compose redis 버전 고정
 - 운영자는 비개발자: 결과 보고는 "무엇이 바뀌었고 어떻게 확인하는지" 한 줄 + 복붙 가능한 명령
 
 ## 스택
-TypeScript 단일. Next.js(App Router) + Auth.js + Drizzle / Node 워커 + BullMQ / PostgreSQL + Redis / Docker Compose + Caddy
-실시간은 SSE(Redis pub/sub). 관리형 서비스 의존 금지 (어느 VM이든 compose로 배포)
+TypeScript 단일. Next.js(App Router) + Auth.js + Drizzle / Node 워커 + BullMQ / PostgreSQL + Redis / Docker Compose (+ Tailscale serve)
+실시간은 SSE(Redis pub/sub). 관리형 서비스 의존 금지 (어느 VM이든 compose로 배포). 포트는 127.0.0.1만, JStudio 포트(8000·5432·Tailscale 443) 사용 금지
 Docker 이미지는 linux/arm64 + linux/amd64 모두 빌드
 
 ## Git
@@ -618,13 +630,14 @@ Docker 이미지는 linux/arm64 + linux/amd64 모두 빌드
 ```
 [x] 서비스 이름: AgentOrg
 [x] 기술 스택: TypeScript 단일 + Docker Compose
-[x] 배포: 오라클 클라우드 (어느 VM이든 동일)
-[ ] GitHub 저장소 agent-org 생성 (비공개)
+[x] 배포: 기존 오라클 ARM VM + Tailscale serve (도메인 없음)
+[x] GitHub 저장소 agent-org 생성 (비공개)
 [ ] Claude API 키 발급 (.env에만 저장)
 [ ] 첫 조직 템플릿 4명의 이름·성격·특기 초안
 [ ] 캐릭터 파츠(머리/얼굴/색) 최소 세트 결정
-[ ] 도메인 1개 (dev.도메인 / 도메인 두 개로 씀) — 0-B 전까지
-[ ] 오라클 클라우드 계정 + Always Free ARM VM — 0-B 전까지
+[x] 오라클 ARM VM (JStudio 서버 공용)
+[ ] 휴대폰에 Tailscale 앱 설치·로그인 — 0-B 확인 전까지
+[ ] 도메인 — 일반 공개할 때만 (지금은 불필요)
 [ ] Claude Code 웹/앱에 GitHub 저장소 연결
 ```
 
@@ -682,13 +695,13 @@ F014 긴급 정지 구현해줘. 완료 기준: 실행 중 워커가 1턴 내 �
 테스트 돌리고, 통과하면 feat(F0xx): … 형식으로 커밋하고 dev 브랜치로 PR 올려줘.
 그리고 내가 휴대폰 브라우저에서 뭘 확인하면 되는지 한 줄로 알려줘.
 ```
-PR을 머지하면 GitHub Actions가 dev 서버에 자동 배포 → 휴대폰으로 `dev.도메인` 접속해 확인.
-만족스러우면: `dev를 main에 머지해줘.` → 운영 서버 자동 배포.
+PR을 머지하면 2분 안에 VM 타이머가 dev 스택에 자동 배포 → 휴대폰으로 `https://<서버>.ts.net:10000` 접속해 확인.
+만족스러우면: `dev를 main에 머지해줘.` → 운영 스택(`:8443`) 자동 배포.
 
 ### 5-6. 권장 첫 7개 명령 (순서대로)
 ```
 1. "docs/PRD.md 읽고 0-A 계획 보여줘" → 승인 → 실행
-1-2. "0-B: 12장 보고 오라클 VM 세팅 명령을 순서대로 정리해줘 + GitHub Actions 배포 워크플로 작성해줘" → VM에서 복붙 1회
+1-2. "0-B: 12장 보고 VM 세팅 명령을 순서대로 정리해줘 + 배포 스크립트·타이머 작성해줘" → VM에서 복붙 1회
 2. "1-A: F001, F002, 7장 스키마. 계획 먼저"
 3. "1-B: gateway/guards/guards.test. PART 2 원칙 5 필수"
 4. "1-C: F005, F009, F008 팀원 루프. 에이전트 1명이 지시→산출물→보고까지"
@@ -704,11 +717,11 @@ PR을 머지하면 GitHub Actions가 dev 서버에 자동 배포 → 휴대폰�
 [휴대폰/PC 브라우저]
    │ 지시
    ▼
-Claude Code 웹/앱 ──PR──▶ GitHub (dev 브랜치) ──Actions 자동 배포──▶ 오라클 VM dev 스택
+Claude Code 웹/앱 ──PR──▶ GitHub (dev 브랜치) ◀──2분마다 pull── 오라클 VM dev 스택
    ▲                                                                       │
-   └──────────── 휴대폰 브라우저로 dev.도메인 접속해 확인 ◀───────────────────┘
+   └──────── 휴대폰 브라우저(Tailscale)로 <서버>.ts.net:10000 접속해 확인 ◀──────┘
 
-만족하면 "dev → main 머지" 지시 → 운영 스택 자동 배포
+만족하면 "dev → main 머지" 지시 → 운영 스택(:8443) 자동 배포
 ```
 
 | 역할 | 어디서 |
@@ -718,6 +731,6 @@ Claude Code 웹/앱 ──PR──▶ GitHub (dev 브랜치) ──Actions 자�
 | 운영 | 오라클 VM 운영 스택 (`main` 머지 때만 변경) |
 | 비상 시 서버 직접 확인 | SSH로 VM 접속 (평소엔 불필요) |
 
-- 비밀값(.env)은 GitHub에 올리지 않고 VM의 `.env` + GitHub Secrets(배포용 SSH 키)에만 둔다
+- 비밀값(.env)은 GitHub에 올리지 않고 VM의 스택별 `.env`에만 둔다. VM은 읽기 전용 Deploy key로 저장소를 가져간다
 - 샌드박스에서는 Docker 전체를 띄우기 어려우므로 **통합 동작 확인은 반드시 dev 서버에서** 한다
-- 오라클 Free Tier ARM VM(4코어/24GB)이면 dev·운영 2스택을 한 대에 올려도 충분하다
+- ARM VM(4코어/24GB)이면 JStudio + dev·운영 2스택을 한 대에 올려도 충분하다

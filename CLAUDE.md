@@ -18,8 +18,8 @@
 - 운영자는 비개발자: 결과 보고는 "무엇이 바뀌었고 어떻게 확인하는지" 한 줄 + 복붙 가능한 명령
 
 ## 스택
-TypeScript 단일. Next.js(App Router) + Auth.js + Drizzle / Node 워커 + BullMQ / PostgreSQL + Redis / Docker Compose + Caddy
-실시간은 SSE(Redis pub/sub). 관리형 서비스 의존 금지 (어느 VM이든 compose로 배포)
+TypeScript 단일. Next.js(App Router) + Auth.js + Drizzle / Node 워커 + BullMQ / PostgreSQL + Redis / Docker Compose (+ Tailscale serve)
+실시간은 SSE(Redis pub/sub). 관리형 서비스 의존 금지 (어느 VM이든 compose로 배포). 포트는 127.0.0.1만, JStudio 포트(8000·5432·Tailscale 443) 사용 금지
 Docker 이미지는 linux/arm64 + linux/amd64 모두 빌드
 
 ## Git
