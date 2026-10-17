@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@agentorg/shared": "workspace:*",
-    "bullmq": "^5.56.0"
+    "bullmq": "^5.56.0",
+    "drizzle-orm": "0.45.4",
+    "postgres": "3.4.9"
   },
   "devDependencies": {
     "@types/node": "^20",
