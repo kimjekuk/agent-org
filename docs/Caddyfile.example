@@ -1,0 +1,11 @@
+# 일반 공개용 Caddy 초안 (PRD 12장 "향후"). 지금은 사용하지 않는다.
+# 쓸 때: compose에 caddy 서비스 추가 + 80·443 개방 + 도메인 DNS 연결.
+# Caddy가 도메인별 HTTPS 인증서를 자동 발급한다.
+
+example.com {
+	reverse_proxy 127.0.0.1:3100
+}
+
+dev.example.com {
+	reverse_proxy 127.0.0.1:3200
+}
