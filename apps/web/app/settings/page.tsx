@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/session";
 import { buttonDanger, buttonGhost, card } from "@/lib/ui";
 import { logout } from "../login/actions";
 import { deleteApiKey, deleteOrg, selectOrg } from "./actions";
-import { ApiKeyForm, CreateOrgForm, RenameOrgForm } from "./forms";
+import { ApiKeyForm, CreateOrgForm, RenameOrgForm, TestConnectionForm } from "./forms";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +88,7 @@ export default async function SettingsPage() {
             : "미등록. 키는 암호화해서 저장하고 다시 보여주지 않습니다."}
         </p>
         <ApiKeyForm provider="anthropic" registered={Boolean(anthropicKey)} />
+        {anthropicKey && <TestConnectionForm />}
         {anthropicKey && (
           <form action={deleteApiKey}>
             <input type="hidden" name="provider" value="anthropic" />

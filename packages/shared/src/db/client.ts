@@ -1,8 +1,12 @@
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
 export type Db = ReturnType<typeof createDb>;
+
+/** 드라이버와 무관한 DB 타입 (운영: postgres-js, 테스트: PGlite). 트랜잭션도 이 타입이다. */
+export type AnyDb = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 export function createDb(url: string) {
   return drizzle(postgres(url, { max: 5 }), { schema });

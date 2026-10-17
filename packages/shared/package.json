@@ -10,7 +10,12 @@
     "./db/migrate": "./src/db/migrate.ts",
     "./audit": "./src/audit.ts",
     "./crypto": "./src/crypto.ts",
-    "./password": "./src/password.ts"
+    "./password": "./src/password.ts",
+    "./budget": "./src/budget.ts",
+    "./approval": "./src/approval.ts",
+    "./llm/gateway": "./src/llm/gateway.ts",
+    "./llm/pricing": "./src/llm/pricing.ts",
+    "./llm/provider": "./src/llm/provider.ts"
   },
   "scripts": {
     "typecheck": "tsc",
@@ -18,10 +23,12 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "drizzle-orm": "0.45.4",
     "postgres": "3.4.9"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "@types/node": "^20.19.43",
     "drizzle-kit": "0.31.11",
     "vitest": "^3.2.7"

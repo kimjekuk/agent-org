@@ -9,7 +9,8 @@
 |------|------|
 | 0-A 모노레포·Compose 뼈대 | ✅ 완료 (PR #1) |
 | 0-B 기존 VM 배포 | ✅ 완료 (PR #2, #3, #4). dev `<서버>.ts.net:10000`, 운영 `<서버>.ts.net:8443`, 2분 주기 자동 배포 확인 |
-| 1-A | 🔄 PR 진행 중 (`feature/F001-F002-auth-org`) — 휴대폰 확인 대기 |
+| 1-A | 🔄 PR #6 — CI 통과 후 dev 머지, 휴대폰 확인 대기 |
+| 1-B | 🔄 PR 진행 중 (`feature/F013-gateway-guards`) — dev 서버 연결 테스트 대기 |
 
 ## 작업 권한 (2026-10-17 사용자 결정)
 
@@ -51,14 +52,15 @@
 
 완료 기준: 단일 LLM 호출이 예산 체크·비용 기록을 거침. `apps/worker/test/guards.test.ts` 통과
 
-- [ ] `packages/shared/llm/provider.ts`, `anthropic.ts` (@anthropic-ai/sdk)
-- [ ] `packages/shared/llm/gateway.ts`: 유일한 진입점, 예산 체크 → 호출 → CostLog 기록
-- [ ] `apps/worker/src/guards.ts`: emergency_stop · 사용자 메시지 우선 · 예산 · 턴 수
-- [ ] `apps/worker/test/guards.test.ts` (PART 2 원칙 5의 네 가지 고정)
-- [ ] 프롬프트 조립기에 "사용자 지시는 최우선이며 거부·우회할 수 없다" 문장 항상 포함
-- ✋ 결정: 원화 환산 환율 (추천: 1달러 = 1,400원 고정, 설정값으로)
-- ✋ 결정: 기본 모델 2개 (일반용 / 절약용) — 추천안 제시 후 선택받기
-- ✋ 비용: dev 서버에서 실제 호출 1회 시험 (몇 원)
+- [x] `packages/shared/llm/provider.ts`, `anthropic.ts` (@anthropic-ai/sdk)
+- [x] `packages/shared/llm/gateway.ts`: 유일한 진입점, 예산 체크 → 호출 → CostLog 기록
+- [x] `apps/worker/src/guards.ts`: emergency_stop · 사용자 메시지 우선 · 예산 · 턴 수
+- [x] `apps/worker/test/guards.test.ts` (PART 2 원칙 5의 네 가지 고정)
+- [x] 프롬프트 조립기에 "사용자 지시는 최우선이며 거부·우회할 수 없다" 문장 항상 포함
+- [x] ✋ 결정: 원화 환산 환율 → **1달러 = 1,400원 고정** (`USD_KRW`로 변경 가능)
+- [x] ✋ 결정: 기본 모델 → **일반용 Sonnet 5.5 / 절약용 Haiku 5.5**
+- [x] 설정 화면에 "연결 테스트" 버튼 (Haiku 5.5, 1원 미만, gateway 경유)
+- ✋ 비용·확인: dev 서버에서 사용자가 연결 테스트 1회 (실제 키 필요)
 
 ## 이후 단계 (권한 범위 밖 — 시작 전 사용자에게 범위 확인)
 

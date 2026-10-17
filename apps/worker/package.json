@@ -8,7 +8,7 @@
     "build": "tsup",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@agentorg/shared": "workspace:*",
@@ -17,6 +17,7 @@
     "postgres": "3.4.9"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "@types/node": "^20",
     "tsup": "^8.5.0",
     "tsx": "^4.20.0",
