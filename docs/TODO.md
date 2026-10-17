@@ -19,7 +19,8 @@
 
 **범위: 1-E** (2026-10-18 사용자 결정. 1-A~1-D는 완료). 이 범위 안에서는 아래를 묻지 않고 진행한다.
 - 브랜치 생성(`feature/F0xx-설명`), 커밋, **기능 브랜치 push**, `dev`로 PR 생성
-- PR의 **CI 4개가 모두 통과(pending 0, failing 0)한 것을 확인한 뒤 `dev`에 머지** (merge commit)
+- PR의 **CI가 모두 통과(pending 0, failing 0)한 것을 확인한 뒤 `dev`에 머지** (merge commit). PR에서는 2개(검사·compose)만 돌고, 이미지 빌드 2개는 dev·main 머지 후에 돈다 (2026-10-18 결정: Actions 사용 시간 절약)
+- dev 머지 후 이미지 빌드가 실패하면 바로 고친다
 
 **항상 멈추고 묻는다**
 - 아래 ✋ 항목

@@ -22,8 +22,10 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  # arm64+amd64 이미지 빌드는 Actions 사용 시간을 가장 많이 쓴다 → PR에서는 건너뛰고 dev·main에 머지(push)될 때만
   images:
     name: image build (${{ matrix.app }}, arm64+amd64)
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     strategy:
       matrix:
