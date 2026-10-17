@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@agentorg/shared": "workspace:*",
+    "drizzle-orm": "0.45.4",
     "ioredis": "^5.6.0",
     "next": "15.5.28",
+    "next-auth": "5.0.0-beta.32",
     "postgres": "^3.4.0",
     "react": "19.1.0",
     "react-dom": "19.1.0"

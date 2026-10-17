@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 1-A — F001 로그인 · F002 조직 · 7장 스키마
+- Drizzle 스키마(7장 전체 13개 테이블) + 첫 마이그레이션. 워커 컨테이너 시작 시 자동 적용
+- F001: Auth.js v5(beta.32 고정) 이메일/비밀번호 로그인, `/setup` 첫 관리자 계정(사용자 0명일 때만), 비밀번호 scrypt
+- F001: Claude API 키 AES-256-GCM 암호화 저장·교체·삭제 (다시 표시하지 않음)
+- F002: 조직 만들기·선택·이름 변경·삭제 (`/settings`)
+- 모든 변경을 AuditLog에 기록 (키 값은 기록하지 않음)
+- `deploy.sh`: `AUTH_SECRET`·`ENCRYPTION_KEY` 자동 생성, pull 후 새 스크립트로 재실행
+
 ### 0-B — 기존 VM 배포 (PRD v1.2)
 - PRD v1.2: 기존 오라클 ARM VM(JStudio 동거) + Tailscale serve, 도메인 없음, VM pull 자동 배포
 - Docker Compose 4개 (caddy 제거, 초안은 `docs/Caddyfile.example`). `docker-compose.dev.yml`(127.0.0.1:3200) / `docker-compose.prod.yml`(127.0.0.1:3100)

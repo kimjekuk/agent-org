@@ -9,7 +9,7 @@
 |------|------|
 | 0-A 모노레포·Compose 뼈대 | ✅ 완료 (PR #1) |
 | 0-B 기존 VM 배포 | ✅ 완료 (PR #2, #3, #4). dev `<서버>.ts.net:10000`, 운영 `<서버>.ts.net:8443`, 2분 주기 자동 배포 확인 |
-| 1-A | ⏭ 다음 |
+| 1-A | 🔄 PR 진행 중 (`feature/F001-F002-auth-org`) — 휴대폰 확인 대기 |
 
 ## 작업 권한 (2026-10-17 사용자 결정)
 
@@ -35,15 +35,15 @@
 
 완료 기준: 휴대폰에서 `/setup` 계정 생성 → 로그인 → 조직 생성 → API 키 암호화 저장
 
-- [ ] `packages/shared/db`: Drizzle 스키마(7장 전체 테이블), client, 마이그레이션
-- [ ] 배포 시 자동 마이그레이션 (web 기동 전 실행)
-- [ ] `deploy.sh`: `AUTH_SECRET`, `ENCRYPTION_KEY` 자동 생성 (없을 때만)
-- [ ] `packages/shared/crypto.ts`: AES-256-GCM (API 키 암호화) + 테스트
-- [ ] F001: Auth.js 이메일/비밀번호 로그인, `/setup` 첫 계정, 회원가입 비공개
-- [ ] F001: API 키 등록 화면 (키는 화면에 다시 표시하지 않음)
-- [ ] F002: 조직 CRUD, 템플릿 1종(콘텐츠 제작팀) 자리만, 사용자당 여러 조직
-- [ ] CI: DB가 필요한 테스트는 compose/서비스 컨테이너에서
-- [ ] 모바일 375px 먼저
+- [x] `packages/shared/db`: Drizzle 스키마(7장 전체 테이블), client, 마이그레이션
+- [x] 배포 시 자동 마이그레이션 (web 기동 전 실행)
+- [x] `deploy.sh`: `AUTH_SECRET`, `ENCRYPTION_KEY` 자동 생성 (없을 때만)
+- [x] `packages/shared/crypto.ts`: AES-256-GCM (API 키 암호화) + 테스트
+- [x] F001: Auth.js 이메일/비밀번호 로그인, `/setup` 첫 계정, 회원가입 비공개
+- [x] F001: API 키 등록 화면 (키는 화면에 다시 표시하지 않음)
+- [x] F002: 조직 CRUD(만들기·선택·이름 변경·삭제), 사용자당 여러 조직. 템플릿(4명 자동 채용)은 에이전트가 생기는 1-C에서
+- [x] CI: DB가 필요한 테스트는 compose/서비스 컨테이너에서
+- [x] 모바일 375px 먼저
 - ✋ 확인: 휴대폰에서 `/setup` → 로그인 → 조직 생성 → API 키 저장
 - ✋ 준비: Claude API 키 발급 (console.anthropic.com). 키 입력은 사용자가 직접
 

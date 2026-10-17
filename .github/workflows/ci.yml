@@ -42,18 +42,26 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
 
   compose:
-    name: compose up (dev 스택) → 빈 페이지 확인
+    name: compose up (dev 스택) → 첫 화면 확인
     runs-on: ubuntu-latest
     env:
       COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
       POSTGRES_DB: agentorg_dev
       POSTGRES_USER: agentorg
       POSTGRES_PASSWORD: ci-only-password
+      AUTH_SECRET: ci-only-auth-secret
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
     steps:
       - uses: actions/checkout@v4
       - run: docker compose up -d --build --wait --wait-timeout 300
-      - name: 빈 페이지 (127.0.0.1:3200)
-        run: curl -fsS http://127.0.0.1:3200/ | grep -o "<h1[^>]*>AgentOrg"
+      - name: 첫 화면 /setup (127.0.0.1:3200)
+        # 첫 접속 → /setup. 워커가 DB 마이그레이션을 마칠 때까지 잠시 재시도한다
+        run: |
+          for i in $(seq 1 15); do
+            curl -fsSL http://127.0.0.1:3200/ | grep -o "<h1[^>]*>AgentOrg" && exit 0
+            sleep 2
+          done
+          exit 1
       - name: DB·Redis 연결
         run: curl -fsS http://127.0.0.1:3200/api/health | tee /dev/stderr | grep -q '"db":"ok","redis":"ok"'
       - name: worker 기동 로그

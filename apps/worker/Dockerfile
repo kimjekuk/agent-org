@@ -13,4 +13,5 @@ ENV NODE_ENV=production
 RUN pnpm install --frozen-lockfile --prod --filter worker...
 COPY --from=build /repo/apps/worker/dist ./apps/worker/dist
 WORKDIR /repo/apps/worker
-CMD ["node", "dist/index.js"]
+# DB 마이그레이션을 먼저 적용한 뒤 워커를 시작한다
+CMD ["sh", "-c", "node dist/migrate.js && node dist/index.js"]
