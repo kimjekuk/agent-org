@@ -1,13 +1,8 @@
-import fs from "node:fs";
 import path from "node:path";
 import type { NextConfig } from "next";
 
-// PC에서 pnpm dev 실행 시 루트 .env를 읽는다. (Docker에서는 compose가 환경변수를 넣고 .env는 이미지에 없음)
-const rootEnv = path.join(__dirname, "../../.env");
-if (fs.existsSync(rootEnv)) process.loadEnvFile(rootEnv);
-
 const nextConfig: NextConfig = {
-  // standalone은 Docker 이미지용. Windows 로컬 빌드는 symlink 권한 문제로 실패하므로 Dockerfile에서만 켠다.
+  // standalone은 Docker 이미지용. Windows에서는 symlink 권한 문제로 실패하므로 Dockerfile에서만 켠다.
   output: process.env.NEXT_OUTPUT_STANDALONE === "1" ? "standalone" : undefined,
   // 모노레포 루트 기준으로 의존성을 추적해야 standalone 결과물에 packages/shared가 포함된다.
   outputFileTracingRoot: path.join(__dirname, "../../"),
