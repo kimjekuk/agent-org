@@ -1,0 +1,14 @@
+# AgentOrg 자동 배포 (%i = dev | prod). agentorg-deploy@.timer가 실행한다.
+# 설치: docs/DEPLOY.md
+[Unit]
+Description=AgentOrg %i 스택 자동 배포 (git pull → docker compose up)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/agentorg/%i
+ExecStart=/opt/agentorg/%i/deploy/deploy.sh %i
+TimeoutStartSec=30min
