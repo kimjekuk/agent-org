@@ -46,6 +46,8 @@ export interface GatewayCall {
   system?: string;
   messages: LLMMessage[];
   maxTokens?: number;
+  /** 웹 검색 허용 횟수 (에이전트 도구 권한이 있을 때만 넘긴다) */
+  webSearchMaxUses?: number;
 }
 
 export interface GatewayResult {
@@ -54,6 +56,7 @@ export interface GatewayResult {
   stopReason: string | null;
   costKrw: number;
   economyMode: boolean;
+  webSearchRequests: number;
 }
 
 const providers: Record<string, LLMProvider> = { anthropic: anthropicProvider };
@@ -84,8 +87,9 @@ export async function callLLM(db: AnyDb, call: GatewayCall, provider: LLMProvide
     system: call.system,
     messages: call.messages,
     maxTokens: call.maxTokens ?? 16000,
+    webSearchMaxUses: call.webSearchMaxUses,
   });
-  const cost = costKrw(result.usage);
+  const cost = costKrw(result.usage, undefined, result.webSearchRequests);
 
   await db.transaction(async (tx) => {
     const inputTokens = result.usage.reduce((s, u) => s + u.inputTokens + u.cacheWriteTokens + u.cacheReadTokens, 0);
@@ -120,12 +124,13 @@ export async function callLLM(db: AnyDb, call: GatewayCall, provider: LLMProvide
         inputTokens,
         outputTokens,
         costKrw: Number(cost.toFixed(4)),
+        webSearchRequests: result.webSearchRequests,
         stopReason: result.stopReason,
       },
     });
   });
 
-  return { text: result.text, model: result.model, stopReason: result.stopReason, costKrw: cost, economyMode };
+  return { text: result.text, model: result.model, stopReason: result.stopReason, costKrw: cost, economyMode, webSearchRequests: result.webSearchRequests };
 }
 
 /** 예산 초과 시 사용자 결정을 요청한다. 같은 조직에 대기 중인 BUDGET 요청이 있으면 새로 만들지 않는다. */

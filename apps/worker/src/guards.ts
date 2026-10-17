@@ -14,7 +14,7 @@ export interface TurnContext {
   turn: number;
 }
 
-export type StopReason = "EMERGENCY_STOP" | "AGENT_INACTIVE" | "BUDGET" | "MAX_TURNS";
+export type StopReason = "EMERGENCY_STOP" | "AGENT_INACTIVE" | "AGENT_PAUSED" | "BUDGET" | "MAX_TURNS";
 
 export type GuardDecision =
   | { action: "STOP"; reason: StopReason; detail?: string }
@@ -28,10 +28,11 @@ export async function checkTurn(db: AnyDb, ctx: TurnContext): Promise<GuardDecis
   if (!org || org.emergencyStop) return { action: "STOP", reason: "EMERGENCY_STOP" };
 
   const [agent] = await db
-    .select({ isActive: agents.isActive, maxTurns: agents.maxTurns })
+    .select({ isActive: agents.isActive, status: agents.status, maxTurns: agents.maxTurns })
     .from(agents)
     .where(and(eq(agents.id, ctx.agentId), eq(agents.orgId, ctx.orgId)));
   if (!agent || !agent.isActive) return { action: "STOP", reason: "AGENT_INACTIVE" };
+  if (agent.status === "PAUSED") return { action: "STOP", reason: "AGENT_PAUSED" }; // 사용자가 이 에이전트만 멈춤
 
   // 3. 예산 (사용자 메시지 처리도 LLM을 쓰므로 먼저 계산해 둔다)
   const budget = await checkBudget(db, { orgId: ctx.orgId, agentId: ctx.agentId, missionId: ctx.missionId });

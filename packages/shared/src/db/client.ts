@@ -9,7 +9,9 @@ export type Db = ReturnType<typeof createDb>;
 export type AnyDb = PgDatabase<PgQueryResultHKT, typeof schema>;
 
 export function createDb(url: string) {
-  return drizzle(postgres(url, { max: 5 }), { schema });
+  // 연결 수. 로컬 테스트용 PGlite 서버처럼 동시 연결을 못 다루는 DB에서는 DB_POOL_MAX=1
+  const max = Number(process.env.DB_POOL_MAX) || 5;
+  return drizzle(postgres(url, { max }), { schema });
 }
 
 let shared: Db | undefined;

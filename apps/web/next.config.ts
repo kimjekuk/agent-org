@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   // 모노레포 루트 기준으로 의존성을 추적해야 standalone 결과물에 packages/shared가 포함된다.
   outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ["@agentorg/shared"],
+  // BullMQ는 실행 중에 Lua 스크립트 파일을 읽으므로 번들하지 않고 node_modules에서 그대로 쓴다
+  serverExternalPackages: ["bullmq", "ioredis"],
   experimental: {
     // Tailscale serve(HTTPS 프록시) 주소에서 온 폼 제출을 허용한다. (dev :10000, 운영 :8443)
     serverActions: { allowedOrigins: ["**.ts.net", "**.ts.net:10000", "**.ts.net:8443"] },

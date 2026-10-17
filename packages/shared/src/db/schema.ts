@@ -26,6 +26,9 @@ export const memoryScope = pgEnum("memory_scope", ["SHORT", "MID", "LONG"]);
 export const approvalType = pgEnum("approval_type", ["QUESTION", "PROPOSAL", "EXTERNAL", "CHECKPOINT", "BUDGET"]);
 export const approvalStatus = pgEnum("approval_status", ["PENDING", "APPROVED", "REJECTED", "HELD"]);
 
+/** 에이전트 상태 (PRD F003 상태 뱃지). PAUSED = 사용자가 멈춤 */
+export type AgentStatus = "IDLE" | "WORKING" | "PAUSED" | "BLOCKED";
+
 export const users = pgTable("users", {
   id: id(),
   email: text("email").notNull().unique(),
@@ -72,10 +75,10 @@ export const agents = pgTable("agents", {
   modelPrimary: text("model_primary"),
   modelEconomy: text("model_economy"),
   maxTurns: integer("max_turns").notNull().default(20),
-  toolPermissions: jsonb("tool_permissions").$type<Record<string, boolean>>().notNull().default({}),
+  toolPermissions: jsonb("tool_permissions").$type<Partial<Record<string, boolean>>>().notNull().default({}),
   budgetLimit: integer("budget_limit"),
   autonomy: autonomy("autonomy"), // null → 조직 기본값
-  status: text("status").notNull().default("IDLE"),
+  status: text("status").$type<AgentStatus>().notNull().default("IDLE"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: createdAt(),
 });
@@ -128,7 +131,9 @@ export const messages = pgTable("messages", {
 
 export const artifacts = pgTable("artifacts", {
   id: id(),
-  missionId: uuid("mission_id").notNull().references(() => missions.id, { onDelete: "cascade" }),
+  // 미션 없이 사용자가 직접 지시한 결과물은 mission_id가 없다 (F004·F005 직접 지시)
+  orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  missionId: uuid("mission_id").references(() => missions.id, { onDelete: "cascade" }),
   taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
   agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
   title: text("title").notNull(),

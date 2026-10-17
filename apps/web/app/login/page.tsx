@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
-import { hasAnyUser } from "@/lib/session";
+import { getSessionUser, hasAnyUser } from "@/lib/session";
 import { LoginForm } from "./LoginForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ setup?: string }> }) {
   if (!(await hasAnyUser())) redirect("/setup");
-  if ((await auth())?.user?.id) redirect("/settings");
+  if (await getSessionUser()) redirect("/agents");
   const { setup } = await searchParams;
 
   return (

@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@agentorg/shared": "workspace:*",
+    "@anthropic-ai/sdk": "^0.135.0",
     "bullmq": "^5.56.0",
     "drizzle-orm": "0.45.4",
+    "ioredis": "^5.11.1",
     "postgres": "3.4.9"
   },
   "devDependencies": {
