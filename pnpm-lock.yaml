@@ -42,6 +42,9 @@ importers:
         specifier: 19.1.0
         version: 19.1.0(react@19.1.0)
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.10
+        version: 0.5.10
       '@eslint/eslintrc':
         specifier: ^3
         version: 3.3.7

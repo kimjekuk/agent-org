@@ -2,8 +2,11 @@
 
 // F001 API 키 · F002 조직. 모든 변경은 AuditLog에 기록한다 (CLAUDE.md 절대 규칙 4).
 import { writeAudit } from "@agentorg/shared/audit";
+import { checkBudget } from "@agentorg/shared/budget";
 import { encryptSecret } from "@agentorg/shared/crypto";
 import { getDb, schema } from "@agentorg/shared/db";
+import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError } from "@agentorg/shared/llm/gateway";
+import { DEFAULT_MODELS } from "@agentorg/shared/llm/pricing";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -173,4 +176,40 @@ export async function deleteApiKey(form: FormData) {
   });
 
   revalidatePath("/settings");
+}
+
+// ── F013 연결 테스트: gateway를 거친 실제 호출 1회 (Haiku 5.5, 1원 미만) ──
+
+export type TestResult = { error?: string; reply?: string; costKrw?: number; todayRatio?: number; budgetDaily?: number } | undefined;
+
+export async function testConnection(): Promise<TestResult> {
+  const user = await requireUser();
+  const orgId = (await cookies()).get(ORG_COOKIE)?.value;
+  const db = getDb();
+  const [org] = orgId
+    ? await db
+        .select({ id: schema.organizations.id, budgetDaily: schema.organizations.budgetDaily })
+        .from(schema.organizations)
+        .where(and(eq(schema.organizations.id, orgId), eq(schema.organizations.ownerId, user.id)))
+    : [];
+  if (!org) return { error: "먼저 조직을 선택해 주세요 (비용은 조직 예산에 기록됩니다)" };
+
+  try {
+    const r = await callLLM(db, {
+      orgId: org.id,
+      actor: { type: "USER", id: user.id },
+      purpose: "API 키 연결 테스트 (설정 화면)",
+      model: DEFAULT_MODELS.economy,
+      messages: [{ role: "user", content: "연결 확인입니다. '연결됨'이라고만 답해 주세요." }],
+      maxTokens: 1000,
+    });
+    const budget = await checkBudget(db, { orgId: org.id });
+    return { reply: r.text.trim() || "(빈 응답)", costKrw: r.costKrw, todayRatio: budget.ratio, budgetDaily: org.budgetDaily };
+  } catch (e) {
+    if (e instanceof EmergencyStopError || e instanceof BudgetExceededError || e instanceof MissingApiKeyError) return { error: e.message };
+    const status = (e as { status?: number }).status;
+    if (status === 401) return { error: "API 키가 올바르지 않습니다 (401). 키를 다시 확인해 주세요" };
+    if (status === 429) return { error: "요청이 너무 많거나 크레딧이 부족합니다 (429)" };
+    return { error: `Claude 호출에 실패했습니다${status ? ` (${status})` : ""}. 잠시 후 다시 시도해 주세요` };
+  }
 }

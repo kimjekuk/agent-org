@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### 1-B — gateway · guards · F013 CostLog
+- `packages/shared/llm`: Provider 인터페이스, Claude 구현(서버측 대체 모델 `fallbacks: "default"`), 요금표·원화 환산(1달러=1,400원)
+- `gateway.ts`: 유일한 LLM 진입점 — 긴급 정지 확인 → 예산(80% 절약 모델, 100% 중단 + BUDGET 승인 요청) → 키 복호화 → 호출 → CostLog·AuditLog
+- `apps/worker/src/guards.ts`: 매 턴 체크(긴급 정지 → 비활성 → 예산 → 사용자 메시지 우선 → 턴 수), `runTurn`으로만 턴 실행
+- 외부 발송 승인 확인(`requireExternalApproval`), 시스템 프롬프트에 사용자 최우선 문장 고정
+- `guards.test.ts` 18개 (PART 2 원칙 5 네 가지), 요금 계산 테스트 6개
+- 설정 화면 "연결 테스트" 버튼 (Haiku 5.5, gateway 경유)
+
 ### 1-A — F001 로그인 · F002 조직 · 7장 스키마
 - Drizzle 스키마(7장 전체 13개 테이블) + 첫 마이그레이션. 워커 컨테이너 시작 시 자동 적용
 - F001: Auth.js v5(beta.32 고정) 이메일/비밀번호 로그인, `/setup` 첫 관리자 계정(사용자 0명일 때만), 비밀번호 scrypt

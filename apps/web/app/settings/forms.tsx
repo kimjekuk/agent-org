@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { button, buttonGhost, errorText, input } from "@/lib/ui";
-import { type ActionResult, createOrg, renameOrg, saveApiKey } from "./actions";
+import { type ActionResult, createOrg, renameOrg, saveApiKey, testConnection } from "./actions";
 
 function Message({ state }: { state: ActionResult }) {
   if (state?.error) return <p className={errorText}>{state.error}</p>;
@@ -59,6 +59,29 @@ export function ApiKeyForm({ provider, registered }: { provider: string; registe
         {pending ? "저장 중…" : registered ? "키 바꾸기" : "키 저장"}
       </button>
       <Message state={state} />
+    </form>
+  );
+}
+
+const won = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 });
+
+export function TestConnectionForm() {
+  const [state, action, pending] = useActionState(testConnection, undefined);
+  return (
+    <form action={action} className="flex flex-col gap-2">
+      <button type="submit" disabled={pending} className={`${buttonGhost} w-full`}>
+        {pending ? "확인 중…" : "연결 테스트 (Haiku 5.5, 1원 미만)"}
+      </button>
+      {state?.error && <p className={errorText}>{state.error}</p>}
+      {state?.reply && (
+        <div className="rounded-lg bg-black/5 p-3 text-sm dark:bg-white/10">
+          <p>응답: {state.reply}</p>
+          <p className="opacity-70">
+            비용: {won.format(state.costKrw ?? 0)}원 · 오늘 조직 사용률: {((state.todayRatio ?? 0) * 100).toFixed(2)}% (일 한도{" "}
+            {won.format(state.budgetDaily ?? 0)}원)
+          </p>
+        </div>
+      )}
     </form>
   );
 }
