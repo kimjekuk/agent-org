@@ -326,8 +326,8 @@ agent-org/                            ← pnpm 모노레포
 │   ├── PRD.md                        ← 이 문서
 │   ├── DEPLOY.md                     ← 오라클 배포 절차 (12장을 옮겨 둠)
 │   └── CHANGELOG.md
-├── docker-compose.yml                ← 로컬·운영 공통
-├── docker-compose.override.yml       ← 로컬 전용 (핫리로드, 포트 노출)
+├── docker-compose.yml                ← dev·운영 공통 (서비스 정의)
+├── docker-compose.dev.yml / docker-compose.prod.yml  ← dev·운영 스택별 포트·볼륨·DB 이름 (12장, 0-B)
 ├── Caddyfile
 ├── .env.example
 ├── .gitignore
