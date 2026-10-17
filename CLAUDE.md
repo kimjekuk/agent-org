@@ -3,6 +3,7 @@
 ## 문서
 - 기획·기능 명세: docs/PRD.md (기능 ID F001~, 로드맵 단계 1-A~ 기준으로 소통)
 - 배포 절차: docs/DEPLOY.md
+- 진행 상황·작업 권한: docs/TODO.md (작업 시작 전에 반드시 읽기)
 
 ## 절대 규칙 (대전제 보호)
 1. 에이전트 루프 매 턴 시작에 apps/worker/src/guards.ts 체크 호출
