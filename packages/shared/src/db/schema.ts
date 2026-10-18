@@ -94,6 +94,7 @@ export const missions = pgTable("missions", {
   budgetLimit: integer("budget_limit").notNull().default(5000), // PRD 11장 초기값
   priority: integer("priority").notNull().default(0),
   outputFormat: text("output_format"),
+  referenceNotes: text("reference_notes"), // 참고 자료 URL·텍스트 (파일 업로드는 이후 단계)
   autonomy: autonomy("autonomy"),
   leaderId: uuid("leader_id").references(() => agents.id, { onDelete: "set null" }),
   status: missionStatus("status").notNull().default("DRAFT"),
@@ -110,6 +111,7 @@ export const tasks = pgTable("tasks", {
   status: taskStatus("status").notNull().default("TODO"),
   order: integer("order").notNull().default(0),
   failCount: integer("fail_count").notNull().default(0),
+  rejectCount: integer("reject_count").notNull().default(0), // 리더 반려 횟수 (Task당 최대 1회)
   createdAt: createdAt(),
 });
 
@@ -174,8 +176,10 @@ export const approvalRequests = pgTable("approval_requests", {
   orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
   missionId: uuid("mission_id").references(() => missions.id, { onDelete: "set null" }),
+  taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
   type: approvalType("type").notNull(),
   content: text("content").notNull(),
+  payload: jsonb("payload"), // 체크포인트 단계(PLAN/TASK/FINAL), 산출물 id 등
   status: approvalStatus("status").notNull().default("PENDING"),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
   userComment: text("user_comment"),

@@ -1,25 +1,25 @@
 // F008 팀원 루프 (PRD 5장 F007/F008). 매 턴: guards → 지시 1개 처리 → 산출물 저장 → 보고.
+// 미션의 리더가 받을 일(계획·검토·통합)은 leader.ts가 처리한다.
 // 턴은 runTurn으로만 실행한다 (CLAUDE.md 절대 규칙 1). LLM은 gateway로만 (규칙 2).
 import type { AgentTemplate, ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
-import { type AgentStatus, agents, artifacts, messages } from "@agentorg/shared/db/schema";
-import { type OrgEvent, publishOrgEvent } from "@agentorg/shared/events";
+import { agents, artifacts, messages, missions, tasks } from "@agentorg/shared/db/schema";
+import { publishOrgEvent } from "@agentorg/shared/events";
 import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError } from "@agentorg/shared/llm/gateway";
 import { DEFAULT_MODELS } from "@agentorg/shared/llm/pricing";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
-import type { RunAgentJob } from "@agentorg/shared/queue";
-import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
+import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
+import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import { runTurn, type StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
-
-type Message = typeof messages.$inferSelect;
-type Agent = typeof agents.$inferSelect;
-type Publish = (orgId: string, event: OrgEvent) => Promise<void>;
+import { type Agent, type Deps, type Enqueue, type Message, type Publish, preview, setStatus, titleOf } from "./common";
+import { handleLeaderMessage, isLeaderWork } from "./leader";
 
 export interface RunDeps {
   provider?: LLMProvider; // 테스트에서 가짜 제공사 주입
   publish?: Publish;
+  enqueue?: Enqueue;
 }
 
 export interface RunResult {
@@ -31,8 +31,9 @@ const RANK_LABEL: Record<AgentTemplate["rank"], string> = { LEADER: "리더", MA
 const WEB_SEARCH_MAX_USES = 5;
 
 /** 처리할 지시가 없거나 guards가 멈출 때까지 한 턴씩 처리한다. */
-export async function runAgent(db: AnyDb, job: RunAgentJob, deps: RunDeps = {}): Promise<RunResult> {
-  const publish = deps.publish ?? publishOrgEvent;
+export async function runAgent(db: AnyDb, job: RunAgentJob, runDeps: RunDeps = {}): Promise<RunResult> {
+  const deps: Deps = { provider: runDeps.provider, publish: runDeps.publish ?? publishOrgEvent, enqueue: runDeps.enqueue ?? enqueueAgentRun };
+  const publish = deps.publish;
   let done = 0;
 
   for (let turn = 1; ; turn++) {
@@ -40,18 +41,19 @@ export async function runAgent(db: AnyDb, job: RunAgentJob, deps: RunDeps = {}):
     let stopReason: StopReason | undefined;
 
     const decision = await runTurn(db, { ...job, turn }, async (d) => {
-      // 사용자 메시지가 있으면 그것부터 (guards가 골라 준다)
-      const msg = d.action === "USER_MESSAGES" ? d.messages[0] : await nextAgentDirective(db, job.agentId);
+      // 사용자 메시지가 있으면 그것부터 (guards가 골라 준다). 일시정지·취소된 미션의 메시지는 건너뛴다
+      const userMsg = d.action === "USER_MESSAGES" ? await firstActive(db, d.messages) : undefined;
+      const msg = userMsg ?? (await nextAgentWork(db, job.agentId));
       if (!msg) {
         idle = true;
         return;
       }
-      stopReason = await handleDirective(db, job, msg, deps.provider, publish);
+      stopReason = await handleMessage(db, job, msg, deps);
       if (!stopReason) done++;
     });
 
     if (decision.action === "STOP") {
-      await reportStopIfWaiting(db, job, decision.reason, publish);
+      await reportStopIfWaiting(db, job, decision.reason, deps);
       return { turns: done, stopped: decision.reason };
     }
     if (stopReason) return { turns: done, stopped: stopReason };
@@ -59,20 +61,52 @@ export async function runAgent(db: AnyDb, job: RunAgentJob, deps: RunDeps = {}):
   }
 }
 
-/** 다른 에이전트(상사)가 보낸 미처리 지시 — 우선순위 높은 것, 오래된 것부터 */
-async function nextAgentDirective(db: AnyDb, agentId: string): Promise<Message | undefined> {
-  const [msg] = await db
-    .select()
+const INACTIVE_MISSION = ["PAUSED", "CANCELLED"] as const;
+
+/**
+ * 다른 에이전트가 보낸 미처리 일 — 지시, 또는 (리더라면) 검토할 Task 보고.
+ * 우선순위 높은 것, 오래된 것부터. 일시정지·취소된 미션은 제외.
+ */
+async function nextAgentWork(db: AnyDb, agentId: string): Promise<Message | undefined> {
+  const [row] = await db
+    .select({ msg: messages })
     .from(messages)
-    .where(and(eq(messages.receiverAgentId, agentId), eq(messages.type, "DIRECTIVE"), isNull(messages.readAt)))
+    .leftJoin(missions, eq(missions.id, messages.missionId))
+    .where(
+      and(
+        eq(messages.receiverAgentId, agentId),
+        isNull(messages.readAt),
+        or(eq(messages.type, "DIRECTIVE"), and(eq(messages.type, "REPORT"), isNotNull(messages.taskId))),
+        or(isNull(missions.id), notInArray(missions.status, [...INACTIVE_MISSION])),
+      ),
+    )
     .orderBy(desc(messages.priority), asc(messages.createdAt))
     .limit(1);
-  return msg;
+  return row?.msg;
+}
+
+async function firstActive(db: AnyDb, list: Message[]): Promise<Message | undefined> {
+  for (const m of list) {
+    if (!m.missionId) return m;
+    const [mission] = await db.select({ status: missions.status }).from(missions).where(eq(missions.id, m.missionId));
+    if (mission && !(INACTIVE_MISSION as readonly string[]).includes(mission.status)) return m;
+  }
+  return undefined;
+}
+
+/** 메시지 1개 처리: 미션 리더의 일이면 리더 루프로, 아니면 지시 처리 */
+async function handleMessage(db: AnyDb, job: RunAgentJob, msg: Message, deps: Deps): Promise<StopReason | undefined> {
+  const [agent] = await db.select().from(agents).where(eq(agents.id, job.agentId));
+  if (msg.missionId) {
+    const [mission] = await db.select().from(missions).where(eq(missions.id, msg.missionId));
+    if (mission && isLeaderWork(mission, agent, msg)) return handleLeaderMessage(db, agent, mission, msg, deps);
+  }
+  return handleDirective(db, job, agent, msg, deps);
 }
 
 /** 지시 1개 처리. 루프를 멈춰야 하면 그 이유를 반환한다. */
-async function handleDirective(db: AnyDb, job: RunAgentJob, msg: Message, provider: LLMProvider | undefined, publish: Publish): Promise<StopReason | undefined> {
-  const [agent] = await db.select().from(agents).where(eq(agents.id, job.agentId));
+async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: Message, deps: Deps): Promise<StopReason | undefined> {
+  const { provider, publish } = deps;
   const perms = (agent.toolPermissions ?? {}) as ToolPermissions;
   await setStatus(db, agent, "WORKING", `지시 처리 시작: ${preview(msg.content)}`, publish);
 
@@ -101,9 +135,23 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, msg: Message, provid
       let title: string | null = null;
       if (perms.document && text) {
         title = titleOf(text);
+        // 같은 Task를 다시 하면 버전 +1 (PRD F008 "Artifact 저장(버전+1)")
+        const [prev] = msg.taskId
+          ? await tx.select().from(artifacts).where(eq(artifacts.taskId, msg.taskId)).orderBy(desc(artifacts.version)).limit(1)
+          : [];
         const [art] = await tx
           .insert(artifacts)
-          .values({ orgId: job.orgId, missionId: msg.missionId, taskId: msg.taskId, agentId: agent.id, title, format: "markdown", content: text })
+          .values({
+            orgId: job.orgId,
+            missionId: msg.missionId,
+            taskId: msg.taskId,
+            agentId: agent.id,
+            title,
+            format: "markdown",
+            content: text,
+            version: prev ? prev.version + 1 : 1,
+            parentVersionId: prev?.id ?? null,
+          })
           .returning({ id: artifacts.id });
         artifactId = art.id;
         await writeAudit(tx, {
@@ -138,6 +186,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, msg: Message, provid
         })
         .returning({ id: messages.id });
       await tx.update(messages).set({ readAt: new Date() }).where(eq(messages.id, msg.id));
+      if (msg.taskId) await tx.update(tasks).set({ status: "REVIEW" }).where(and(eq(tasks.id, msg.taskId), eq(tasks.status, "DOING")));
       await writeAudit(tx, {
         orgId: job.orgId,
         actorType: "AGENT",
@@ -150,6 +199,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, msg: Message, provid
       });
     });
     await publish(job.orgId, { type: "message", agentId: agent.id });
+    await notifySender(job, msg, deps);
     await setStatus(db, agent, "IDLE", "지시 처리 완료", publish);
     return undefined;
   } catch (e) {
@@ -159,17 +209,17 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, msg: Message, provid
       return "EMERGENCY_STOP";
     }
     if (e instanceof BudgetExceededError) {
-      await report(db, job, agent, msg, `예산 한도(${e.limitName ?? "예산"})에 도달해 멈췄습니다. 승인 대기함에서 결정해 주세요.`, false, publish);
+      await report(db, job, agent, msg, `예산 한도(${e.limitName ?? "예산"})에 도달해 멈췄습니다. 승인 대기함에서 결정해 주세요.`, false, deps);
       await setStatus(db, agent, "BLOCKED", "예산 초과로 중단", publish);
       return "BUDGET";
     }
     if (e instanceof MissingApiKeyError) {
-      await report(db, job, agent, msg, e.message, false, publish);
+      await report(db, job, agent, msg, e.message, false, deps);
       await setStatus(db, agent, "BLOCKED", e.message, publish);
       return "AGENT_INACTIVE";
     }
     const reason = `처리에 실패했습니다: ${(e as Error).message ?? "알 수 없는 오류"}`;
-    await report(db, job, agent, msg, reason, true, publish);
+    await report(db, job, agent, msg, reason, true, deps);
     await setStatus(db, agent, "IDLE", reason, publish);
     return undefined;
   }
@@ -194,8 +244,19 @@ function systemPromptFor(agent: Agent, perms: ToolPermissions): string {
   });
 }
 
-/** 실패·중단을 사용자(또는 지시한 상사)에게 보고한다. markRead=false면 지시를 남겨 두어 나중에 다시 처리한다. */
-async function report(db: AnyDb, job: RunAgentJob, agent: Agent, msg: Message, content: string, markRead: boolean, publish: Publish) {
+/** 미션 Task를 지시한 상사(리더)에게 검토할 보고가 왔음을 알린다 */
+async function notifySender(job: RunAgentJob, msg: Message, deps: Deps) {
+  if (msg.taskId && msg.senderType === "AGENT" && msg.senderAgentId) {
+    await deps.enqueue({ orgId: job.orgId, agentId: msg.senderAgentId });
+    if (msg.missionId) await deps.publish(job.orgId, { type: "mission", missionId: msg.missionId });
+  }
+}
+
+/**
+ * 실패·중단을 사용자(또는 지시한 상사)에게 보고한다. markRead=false면 지시를 남겨 두어 나중에 다시 처리한다
+ * (retryLater: 리더는 이 보고를 실패로 세지 않는다).
+ */
+async function report(db: AnyDb, job: RunAgentJob, agent: Agent, msg: Message, content: string, markRead: boolean, deps: Deps) {
   await db.transaction(async (tx) => {
     const [r] = await tx
       .insert(messages)
@@ -208,7 +269,7 @@ async function report(db: AnyDb, job: RunAgentJob, agent: Agent, msg: Message, c
         receiverAgentId: msg.senderType === "AGENT" ? msg.senderAgentId : null,
         type: "REPORT",
         content,
-        payload: { directiveId: msg.id, failed: true },
+        payload: { directiveId: msg.id, failed: true, retryLater: !markRead },
       })
       .returning({ id: messages.id });
     if (markRead) await tx.update(messages).set({ readAt: new Date() }).where(eq(messages.id, msg.id));
@@ -222,11 +283,12 @@ async function report(db: AnyDb, job: RunAgentJob, agent: Agent, msg: Message, c
       reasoning: content,
     });
   });
-  await publish(job.orgId, { type: "message", agentId: agent.id });
+  await deps.publish(job.orgId, { type: "message", agentId: agent.id });
+  if (markRead) await notifySender(job, msg, deps);
 }
 
 /** 예산·턴 수로 멈췄는데 아직 지시가 남아 있으면 사용자에게 알린다 (PRD: "중단 + 상위 보고") */
-async function reportStopIfWaiting(db: AnyDb, job: RunAgentJob, reason: StopReason, publish: Publish) {
+async function reportStopIfWaiting(db: AnyDb, job: RunAgentJob, reason: StopReason, deps: Deps) {
   if (reason !== "BUDGET" && reason !== "MAX_TURNS") return;
   const [waiting] = await db
     .select()
@@ -239,35 +301,5 @@ async function reportStopIfWaiting(db: AnyDb, job: RunAgentJob, reason: StopReas
     reason === "BUDGET"
       ? "예산 한도에 도달해 남은 지시를 멈췄습니다."
       : `최대 턴 수(${agent.maxTurns})에 도달해 남은 지시를 멈췄습니다. 다시 지시하면 이어서 처리합니다.`;
-  await report(db, job, agent, waiting, text, false, publish);
-}
-
-/** 상태 변경 + 감사 로그. 사용자가 작업 중에 '멈춤'을 눌렀다면 PAUSED를 덮어쓰지 않는다. */
-async function setStatus(db: AnyDb, agent: Agent, status: AgentStatus, reasoning: string, publish: Publish) {
-  const updated = await db
-    .update(agents)
-    .set({ status })
-    .where(and(eq(agents.id, agent.id), ne(agents.status, "PAUSED")))
-    .returning({ id: agents.id });
-  if (updated.length === 0) return;
-  await writeAudit(db, {
-    orgId: agent.orgId,
-    actorType: "AGENT",
-    actorId: agent.id,
-    action: "agent.status",
-    targetType: "agent",
-    targetId: agent.id,
-    reasoning,
-    payload: { to: status },
-  });
-  await publish(agent.orgId, { type: "agent", agentId: agent.id });
-}
-
-function titleOf(markdown: string): string {
-  const heading = markdown.match(/^#\s+(.+)$/m)?.[1]?.trim();
-  return (heading || markdown.split("\n")[0].trim() || "결과물").slice(0, 80);
-}
-
-function preview(text: string): string {
-  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+  await report(db, job, agent, waiting, text, false, deps);
 }
