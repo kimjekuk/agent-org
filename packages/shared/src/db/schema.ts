@@ -33,6 +33,7 @@ export const users = pgTable("users", {
   id: id(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  briefingSeenAt: timestamp("briefing_seen_at", { withTimezone: true }), // F016 출근 브리핑을 마지막으로 닫은 때
   createdAt: createdAt(),
 });
 
@@ -197,5 +198,22 @@ export const auditLogs = pgTable("audit_logs", {
   targetId: text("target_id"),
   reasoning: text("reasoning"),
   payload: jsonb("payload"),
+  createdAt: createdAt(),
+});
+
+// F017 웹 푸시 구독 (기기·브라우저마다 1개)
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: id(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: createdAt(),
+});
+
+// 앱이 스스로 만들어 쓰는 비밀값 (예: 웹 푸시 VAPID 키). 값은 ENCRYPTION_KEY로 암호화해 저장한다
+export const appSecrets = pgTable("app_secrets", {
+  name: text("name").primaryKey(),
+  encryptedValue: text("encrypted_value").notNull(),
   createdAt: createdAt(),
 });

@@ -38,6 +38,11 @@ async function spent(db: AnyDb, ...conds: Parameters<typeof and>): Promise<numbe
   return Number(row?.total ?? 0);
 }
 
+/** 조직의 오늘(한국 시간) 사용액 (원) — 대시보드용 */
+export function spentToday(db: AnyDb, orgId: string): Promise<number> {
+  return spent(db, eq(costLogs.orgId, orgId), gte(costLogs.createdAt, startOfToday));
+}
+
 /** 조직·미션·에이전트 한도 중 가장 많이 찬 것을 기준으로 판단한다. */
 export async function checkBudget(db: AnyDb, scope: BudgetScope): Promise<BudgetCheck> {
   const [org] = await db.select().from(organizations).where(eq(organizations.id, scope.orgId));
