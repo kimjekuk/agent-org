@@ -1,13 +1,13 @@
 import { getDb, schema } from "@agentorg/shared/db";
-import { PRICING_PAGES, PROVIDER_LABEL, PROVIDERS, type ProviderName } from "@agentorg/shared/llm/models";
+import { listModelChoices, PRICING_PAGES, PROVIDER_LABEL, PROVIDERS, type ProviderName } from "@agentorg/shared/llm/models";
 import { asc, eq } from "drizzle-orm";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
-import { buttonDanger, buttonGhost, card } from "@/lib/ui";
+import { button, buttonDanger, buttonGhost, card, input } from "@/lib/ui";
 import { logout } from "@/app/login/actions";
 import { deleteApiKey, deleteOrg, selectOrg } from "./actions";
 import { ApiKeyForm, CreateOrgForm, RenameOrgForm, TestConnectionForm } from "./forms";
-import { toggleModel } from "./model-actions";
+import { saveFallbackModel, toggleModel } from "./model-actions";
 import { DeleteModelForm, ModelForm } from "./model-forms";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +27,10 @@ export default async function SettingsPage() {
     .select({ provider: schema.apiKeys.provider, createdAt: schema.apiKeys.createdAt })
     .from(schema.apiKeys)
     .where(eq(schema.apiKeys.userId, user.id));
-  const currentOrgId = (await getCurrentOrg(user.id))?.id;
+  const currentOrg = await getCurrentOrg(user.id);
+  const currentOrgId = currentOrg?.id;
   const models = await db.select().from(schema.llmModels).orderBy(asc(schema.llmModels.provider), asc(schema.llmModels.label));
+  const modelChoices = await listModelChoices(db);
   const providerOptions = PROVIDERS.filter((p) => p !== "anthropic").map((p) => ({ value: p, label: PROVIDER_LABEL[p] }));
 
   return (
@@ -160,6 +162,28 @@ export default async function SettingsPage() {
           </div>
         </details>
       </section>
+
+      {currentOrg && (
+        <section className={`${card} flex flex-col gap-3`} aria-label="장애 시 대체 모델">
+          <h2 className="font-semibold">장애 시 대체 모델</h2>
+          <p className="text-sm opacity-70">
+            AI 회사 서버가 과부하·오류·시간 초과일 때 이 모델로 한 번 더 시도합니다 ({currentOrg.name}). 다른 회사 모델이면 그 회사 API 키가 있어야 합니다.
+          </p>
+          <form action={saveFallbackModel} className="flex flex-col gap-2">
+            <select key={currentOrg.fallbackModel ?? ""} name="fallbackModel" defaultValue={currentOrg.fallbackModel ?? ""} className={`${input} appearance-none`} aria-label="대체 모델">
+              <option value="">쓰지 않음 (실패로 처리)</option>
+              {modelChoices.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <button type="submit" className={button}>
+              저장
+            </button>
+          </form>
+        </section>
+      )}
 
       <section className={`${card} flex flex-col gap-1`}>
         <h2 className="font-semibold">계정</h2>

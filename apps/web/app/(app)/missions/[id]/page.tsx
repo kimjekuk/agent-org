@@ -41,7 +41,7 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
   const [taskList, agentList, [spent], openApprovals, finals] = await Promise.all([
     db.select().from(schema.tasks).where(eq(schema.tasks.missionId, mission.id)).orderBy(asc(schema.tasks.order)),
     db.select().from(schema.agents).where(eq(schema.agents.orgId, org.id)),
-    db.select({ total: sql<string>`coalesce(sum(${schema.costLogs.cost}), 0)` }).from(schema.costLogs).where(eq(schema.costLogs.missionId, mission.id)),
+    db.select({ total: sql<string>`coalesce(sum(${schema.costLogs.cost}), 0)`, calls: sql<number>`count(*)::int` }).from(schema.costLogs).where(eq(schema.costLogs.missionId, mission.id)),
     db
       .select()
       .from(schema.approvalRequests)
@@ -89,6 +89,10 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
           <dt className="opacity-60">예산</dt>
           <dd className={used >= mission.budgetLimit * 0.8 ? "font-semibold text-red-600 dark:text-red-400" : ""}>
             {won.format(used)} / {won.format(mission.budgetLimit)}원
+          </dd>
+          <dt className="opacity-60">AI 호출</dt>
+          <dd className={(spent?.calls ?? 0) >= mission.callLimit ? "font-semibold text-red-600 dark:text-red-400" : ""}>
+            {spent?.calls ?? 0} / {mission.callLimit}회
           </dd>
           <dt className="opacity-60">리더 · 자율성</dt>
           <dd>

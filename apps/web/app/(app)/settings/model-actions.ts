@@ -3,10 +3,11 @@
 // 모델·요금 관리 (OpenAI·Gemini·DeepSeek 등). 요금은 사용자가 공식 페이지를 보고 입력·확인한다 (2026-10-18 결정)
 import { writeAudit } from "@agentorg/shared/audit";
 import { getDb, schema } from "@agentorg/shared/db";
-import { PROVIDERS, type ProviderName } from "@agentorg/shared/llm/models";
+import { listModelChoices, PROVIDERS, type ProviderName } from "@agentorg/shared/llm/models";
 import { isBuiltinModel } from "@agentorg/shared/llm/pricing";
 import { eq, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 
 export type ModelFormState = { error?: string; ok?: string } | undefined;
@@ -81,4 +82,28 @@ export async function deleteModel(_prev: ModelFormState, form: FormData): Promis
   });
   revalidatePath("/settings");
   return { ok: "지웠습니다" };
+}
+
+/** F109 장애 시 대체 모델 (선택한 조직). 비우면 대체 없이 실패 처리 */
+export async function saveFallbackModel(form: FormData) {
+  const user = await requireUser();
+  const org = await getCurrentOrg(user.id);
+  if (!org) return;
+  const raw = String(form.get("fallbackModel") ?? "").trim();
+  const choices = await listModelChoices(getDb());
+  const model = choices.some((c) => c.id === raw) ? raw : null;
+  if (raw && !model) return;
+  await getDb().transaction(async (tx) => {
+    await tx.update(schema.organizations).set({ fallbackModel: model }).where(eq(schema.organizations.id, org.id));
+    await writeAudit(tx, {
+      orgId: org.id,
+      actorType: "USER",
+      actorId: user.id,
+      action: "org.fallback_model",
+      targetType: "organization",
+      targetId: org.id,
+      reasoning: model ? `장애 시 대체 모델: ${model}` : "장애 시 대체 모델 쓰지 않음",
+    });
+  });
+  revalidatePath("/settings");
 }
