@@ -6,6 +6,7 @@ import { type AnyDb, getDb, schema } from "@agentorg/shared/db";
 import { publishOrgEvent } from "@agentorg/shared/events";
 import { AUTONOMY_LABEL, type Autonomy, type MissionMessagePayload, OUTPUT_FORMATS } from "@agentorg/shared/missions";
 import { agentsWithPendingDirectives, enqueueAgentRun } from "@agentorg/shared/queue";
+import { isStalled, resumeMission as resumeStalledMission } from "@agentorg/shared/recovery";
 import { pickLeader, startMission } from "@agentorg/shared/schedule";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -116,7 +117,12 @@ async function setMissionStatus(form: FormData, from: string[], to: "PAUSED" | "
     await tx.update(schema.missions).set({ status: to }).where(eq(schema.missions.id, mission.id));
     await writeAudit(tx, { orgId: org.id, actorType: "USER", actorId: user.id, action, targetType: "mission", targetId: mission.id, reasoning });
   });
-  if (to === "RUNNING") for (const job of await agentsWithPendingDirectives(getDb(), org.id)) await enqueueAgentRun(job);
+  if (to === "RUNNING") {
+    // F109: 처리 중인 일이 없으면(일시정지 동안 끊긴 단계 등) 리더가 이어서 진행한다
+    const [now] = await getDb().select().from(schema.missions).where(eq(schema.missions.id, mission.id));
+    if (now && (await isStalled(getDb(), now, { auto: false }))) await resumeStalledMission(getDb(), now, { type: "USER", id: user.id });
+    for (const job of await agentsWithPendingDirectives(getDb(), org.id)) await enqueueAgentRun(job);
+  }
   await publishOrgEvent(org.id, { type: "mission", missionId: mission.id });
   revalidatePath(`/missions/${mission.id}`);
 }

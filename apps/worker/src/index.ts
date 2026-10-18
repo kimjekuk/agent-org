@@ -1,6 +1,7 @@
 import { AGENT_QUEUE, APP_NAME } from "@agentorg/shared";
 import { getDb } from "@agentorg/shared/db";
 import { agentsWithPendingDirectives, type RunAgentJob } from "@agentorg/shared/queue";
+import { resumeStalledMissions } from "@agentorg/shared/recovery";
 import { runDueSchedules } from "@agentorg/shared/schedule";
 import { Queue, Worker } from "bullmq";
 import { runAgent } from "./loops/member";
@@ -20,9 +21,12 @@ const worker = new Worker<RunAgentJob>(
 );
 
 // 주기 점검: 배포·재시작·큐 등록 실패로 남은 지시를 다시 큐에 넣는다 (작업 유실 방지)
+// F109: 진행 중인데 아무도 일하지 않는 미션은 리더가 이어서 진행하게 한다
 const queue = new Queue<RunAgentJob>(AGENT_QUEUE, { connection, defaultJobOptions: { removeOnComplete: 100, removeOnFail: 100 } });
 async function sweep() {
   try {
+    const resumed = await resumeStalledMissions(getDb());
+    if (resumed.length) console.log(`[worker] 멈춘 미션 ${resumed.length}개 이어서 진행`);
     const pending = await agentsWithPendingDirectives(getDb());
     const waiting = await queue.getJobs(["waiting", "active", "delayed"]);
     const queued = new Set(waiting.map((j) => j?.data?.agentId));

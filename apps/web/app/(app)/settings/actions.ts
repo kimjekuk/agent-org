@@ -210,6 +210,7 @@ export async function testConnection(_prev: TestResult, form: FormData): Promise
       model,
       messages: [{ role: "user", content: "연결 확인입니다. '연결됨'이라고만 답해 주세요." }],
       maxTokens: 1000,
+      noFallback: true,
     });
     const budget = await checkBudget(db, { orgId: org.id });
     return { reply: r.text.trim() || "(빈 응답)", model: r.model, costKrw: r.costKrw, todayRatio: budget.ratio, budgetDaily: org.budgetDaily };
