@@ -57,6 +57,13 @@
       "when": 1792311729112,
       "tag": "0007_massive_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792328008816,
+      "tag": "0008_tan_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

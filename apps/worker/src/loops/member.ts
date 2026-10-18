@@ -10,6 +10,7 @@ import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError, M
 import { DEFAULT_MODELS, supportsWebSearch } from "@agentorg/shared/llm/pricing";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
 import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
+import { knowledgeContext } from "@agentorg/shared/knowledge";
 import { extractSection, MEMO_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
 import { allowedAfterHours, isWithinWorkHours, parseWorkHours } from "@agentorg/shared/schedule";
 import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
@@ -128,7 +129,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
         purpose: `지시 처리: ${preview(msg.content)}`,
         model: agent.modelPrimary ?? DEFAULT_MODELS.primary,
         economyModel: agent.modelEconomy ?? DEFAULT_MODELS.economy,
-        system: systemPromptFor(agent, perms, await memoryContext(db, agent.id, msg.missionId)),
+        system: systemPromptFor(agent, perms, await memoryContext(db, agent.id, msg.missionId), await knowledgeContext(db, job.orgId, msg.content.slice(0, 1000), msg.missionId)),
         messages: [{ role: "user", content: msg.content }],
         webSearchMaxUses: perms.web_search ? WEB_SEARCH_MAX_USES : undefined,
       },
@@ -246,7 +247,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
   }
 }
 
-function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string): string {
+function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, knowledge: string): string {
   // 웹 검색은 Claude 모델만 (2026-10-18 결정). 다른 회사 모델이면 권한이 있어도 검색 없이 진행한다
   const canSearch = perms.web_search && supportsWebSearch(agent.modelPrimary ?? DEFAULT_MODELS.primary);
   const skills = (agent.skills ?? []) as string[];
@@ -266,6 +267,7 @@ function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string): 
     skills,
     instructions: rules.map((r) => `- ${r}`).join("\n"),
     memory,
+    knowledge,
   });
 }
 

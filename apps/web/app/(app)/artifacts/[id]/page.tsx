@@ -1,4 +1,5 @@
 import { getDb, schema } from "@agentorg/shared/db";
+import { artifactSourceKey } from "@agentorg/shared/knowledge";
 import { and, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -6,6 +7,7 @@ import { artifactVersions } from "@/lib/artifacts";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonGhost, card } from "@/lib/ui";
+import { addArtifact } from "../../knowledge/actions";
 import { rateArtifact, revertArtifact } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -24,10 +26,14 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
     .from(schema.artifacts)
     .where(and(eq(schema.artifacts.id, id), eq(schema.artifacts.orgId, org.id)));
   if (!art) notFound();
-  const [versions, [agent], [mission]] = await Promise.all([
+  const [versions, [agent], [mission], [wiki]] = await Promise.all([
     artifactVersions(org.id, art),
     art.agentId ? db.select({ name: schema.agents.name }).from(schema.agents).where(eq(schema.agents.id, art.agentId)) : [],
     art.missionId ? db.select({ id: schema.missions.id, title: schema.missions.title }).from(schema.missions).where(eq(schema.missions.id, art.missionId)) : [],
+    db
+      .select({ id: schema.knowledgeDocs.id, artifactId: schema.knowledgeDocs.artifactId })
+      .from(schema.knowledgeDocs)
+      .where(and(eq(schema.knowledgeDocs.orgId, org.id), eq(schema.knowledgeDocs.sourceKey, artifactSourceKey(art)))),
   ]);
   const latest = versions[0];
 
@@ -49,15 +55,14 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
         )}
       </div>
 
-      <form action={rateArtifact} className="flex items-center gap-1" aria-label="평가">
+      <form className="flex items-center gap-1" aria-label="평가">
         <input type="hidden" name="id" value={art.id} />
         <span className="mr-1 text-sm font-semibold">평가</span>
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="submit"
-            name="rating"
-            value={n}
+            formAction={rateArtifact.bind(null, n)}
             aria-label={`${n}점`}
             className={`size-11 text-2xl ${art.rating && n <= art.rating ? "text-amber-400" : "opacity-30"}`}
           >
@@ -65,6 +70,19 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
           </button>
         ))}
       </form>
+
+      {wiki?.artifactId === art.id ? (
+        <Link href={`/knowledge/${wiki.id}`} className="text-sm underline">
+          📚 지식 베이스에 들어 있음
+        </Link>
+      ) : (
+        <form action={addArtifact}>
+          <input type="hidden" name="artifactId" value={art.id} />
+          <button type="submit" className={`${buttonGhost} w-full`}>
+            📚 {wiki ? "이 버전으로 지식 베이스 고치기" : "지식 베이스에 넣기"}
+          </button>
+        </form>
+      )}
 
       <article className={`${card} whitespace-pre-wrap break-words text-sm leading-relaxed`}>{art.content}</article>
 

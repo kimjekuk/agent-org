@@ -3,6 +3,7 @@
 // F011 산출물: 평가(1~5) · 이전 버전으로 되돌리기(새 버전으로 복사). 변경은 AuditLog에 기록
 import { writeAudit } from "@agentorg/shared/audit";
 import { getDb, schema } from "@agentorg/shared/db";
+import { addArtifactToKnowledge, KNOWLEDGE_MIN_RATING } from "@agentorg/shared/knowledge";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -23,14 +24,16 @@ async function context(form: FormData) {
   return { user, org, art };
 }
 
-export async function rateArtifact(form: FormData) {
+/** 별 버튼마다 점수를 묶어 부른다 (formAction={rateArtifact.bind(null, n)}) — 누른 버튼의 name/value는 서버 액션에 오지 않을 수 있다 */
+export async function rateArtifact(rating: number, form: FormData) {
   const { user, org, art } = await context(form);
-  const rating = Number(form.get("rating"));
   if (!art || !Number.isInteger(rating) || rating < 1 || rating > 5) return;
   await getDb().transaction(async (tx) => {
     await tx.update(schema.artifacts).set({ rating }).where(eq(schema.artifacts.id, art.id));
     await writeAudit(tx, { orgId: org.id, actorType: "USER", actorId: user.id, action: "artifact.rate", targetType: "artifact", targetId: art.id, reasoning: `"${art.title}" v${art.version} 평가 ${rating}점` });
   });
+  // F105: 좋은 결과(4점 이상)는 지식 베이스에 넣는다
+  if (rating >= KNOWLEDGE_MIN_RATING) await addArtifactToKnowledge(getDb(), art, { type: "USER", id: user.id }, `평가 ${rating}점`);
   revalidatePath(`/artifacts/${art.id}`);
   revalidatePath("/artifacts");
 }

@@ -25,7 +25,8 @@
     "./push": "./src/push.ts",
     "./schedule": "./src/schedule.ts",
     "./memory": "./src/memory.ts",
-    "./recovery": "./src/recovery.ts"
+    "./recovery": "./src/recovery.ts",
+    "./knowledge": "./src/knowledge.ts"
   },
   "scripts": {
     "typecheck": "tsc",

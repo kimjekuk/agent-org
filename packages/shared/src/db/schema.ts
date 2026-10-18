@@ -161,6 +161,26 @@ export const memories = pgTable("memories", {
   createdAt: createdAt(),
 });
 
+// F105 조직 지식 베이스: 좋은 결과물·직접 쓴 문서를 모아 검색·재활용 (2026-10-18 결정)
+export const knowledgeDocs = pgTable(
+  "knowledge_docs",
+  {
+    id: id(),
+    orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    source: text("source").$type<"MISSION" | "ARTIFACT" | "MANUAL">().notNull(),
+    /** 같은 결과물 계열이면 새로 만들지 않고 고친다: mission:<id> · task:<id> · artifact:<id> (직접 쓴 문서는 null) */
+    sourceKey: text("source_key"),
+    artifactId: uuid("artifact_id").references(() => artifacts.id, { onDelete: "set null" }),
+    missionId: uuid("mission_id").references(() => missions.id, { onDelete: "set null" }),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("knowledge_docs_source_key").on(t.orgId, t.sourceKey)],
+);
+
 export const costLogs = pgTable("cost_logs", {
   id: id(),
   orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),

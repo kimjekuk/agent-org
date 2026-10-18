@@ -13,6 +13,8 @@ export interface AgentPromptParts {
   instructions?: string;
   /** F101 기억 (참고용) */
   memory?: string;
+  /** F105 조직 지식 베이스에서 찾은 관련 자료 (참고용) */
+  knowledge?: string;
 }
 
 export function buildSystemPrompt(parts: AgentPromptParts): string {
@@ -24,5 +26,6 @@ export function buildSystemPrompt(parts: AgentPromptParts): string {
   if (parts.skills?.length) lines.push(`특기: ${parts.skills.join(", ")}`);
   if (parts.instructions) lines.push(`# 지침\n${parts.instructions}`);
   if (parts.memory) lines.push(`# 기억\n${parts.memory}`);
+  if (parts.knowledge) lines.push(`# 조직 지식 (참고)\n${parts.knowledge}`);
   return lines.join("\n\n");
 }
