@@ -5,7 +5,7 @@ import { AGENT_DEFAULTS, type AgentTemplate, CONTENT_TEAM, ROLE_TEMPLATES, type 
 import { writeAudit } from "@agentorg/shared/audit";
 import { type AnyDb, getDb, schema } from "@agentorg/shared/db";
 import { publishOrgEvent } from "@agentorg/shared/events";
-import { MODEL_CHOICES } from "@agentorg/shared/llm/pricing";
+import { listModelChoices } from "@agentorg/shared/llm/models";
 import { enqueueAgentRun } from "@agentorg/shared/queue";
 import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -88,7 +88,8 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
   if (supervisorId && (supervisorId === agent.id || !(await getOrgAgent(org.id, supervisorId)))) return { error: "상사를 다시 골라 주세요" };
   const modelPrimary = String(form.get("modelPrimary"));
   const modelEconomy = String(form.get("modelEconomy"));
-  if (!MODEL_CHOICES.some((m) => m.id === modelPrimary) || !MODEL_CHOICES.some((m) => m.id === modelEconomy)) return { error: "모델을 다시 골라 주세요" };
+  const choices = await listModelChoices(getDb());
+  if (!choices.some((m) => m.id === modelPrimary) || !choices.some((m) => m.id === modelEconomy)) return { error: "모델을 다시 골라 주세요 (꺼진 모델은 고를 수 없습니다)" };
   const maxTurns = Number(form.get("maxTurns"));
   if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 200) return { error: "최대 턴 수는 1~200 사이로 입력해 주세요" };
   const budgetRaw = String(form.get("budgetLimit") ?? "").trim();

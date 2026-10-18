@@ -7,7 +7,7 @@ import type { AnyDb } from "@agentorg/shared/db";
 import { agents, artifacts, messages, missions, tasks } from "@agentorg/shared/db/schema";
 import { publishOrgEvent } from "@agentorg/shared/events";
 import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError } from "@agentorg/shared/llm/gateway";
-import { DEFAULT_MODELS } from "@agentorg/shared/llm/pricing";
+import { DEFAULT_MODELS, isBuiltinModel } from "@agentorg/shared/llm/pricing";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
 import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
 import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
@@ -226,12 +226,14 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
 }
 
 function systemPromptFor(agent: Agent, perms: ToolPermissions): string {
+  // 웹 검색은 Claude 모델만 (2026-10-18 결정). 다른 회사 모델이면 권한이 있어도 검색 없이 진행한다
+  const canSearch = perms.web_search && isBuiltinModel(agent.modelPrimary ?? DEFAULT_MODELS.primary);
   const skills = (agent.skills ?? []) as string[];
   const rules = [
     "지시를 처리해 결과물을 한국어 마크다운으로 작성한다. 첫 줄은 '# 제목'으로 시작한다.",
     "자료를 인용하면 출처(URL)를 함께 적는다. 모르는 것은 지어내지 않는다.",
     "지시가 불명확하면 합리적으로 가정해 진행하고, 맨 끝 '## 확인이 필요한 점'에 가정한 내용을 적는다.",
-    perms.web_search
+    canSearch
       ? "필요하면 웹 검색으로 최신 정보를 확인한다."
       : "웹 검색 권한이 없다. 알고 있는 지식으로만 작성하고, 최신 정보가 필요하면 그렇다고 밝힌다.",
   ];

@@ -6,8 +6,9 @@ import { checkBudget } from "@agentorg/shared/budget";
 import { encryptSecret } from "@agentorg/shared/crypto";
 import { getDb, schema } from "@agentorg/shared/db";
 import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError } from "@agentorg/shared/llm/gateway";
+import { PROVIDER_LABEL, PROVIDERS, type ProviderName, UnknownModelError } from "@agentorg/shared/llm/models";
 import { DEFAULT_MODELS } from "@agentorg/shared/llm/pricing";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { getCurrentOrg, ORG_COOKIE } from "@/lib/org";
@@ -15,7 +16,6 @@ import { requireUser } from "@/lib/session";
 
 export type ActionResult = { error?: string; ok?: string } | undefined;
 
-const PROVIDERS = ["anthropic"] as const; // OpenAI·Gemini 어댑터는 이후 단계
 
 function orgName(form: FormData): string | null {
   const name = String(form.get("name") ?? "").trim();
@@ -122,7 +122,7 @@ export async function saveApiKey(_prev: ActionResult, form: FormData): Promise<A
   const user = await requireUser();
   const provider = String(form.get("provider") ?? "");
   const key = String(form.get("key") ?? "").trim();
-  if (!PROVIDERS.includes(provider as (typeof PROVIDERS)[number])) return { error: "지원하지 않는 제공사입니다" };
+  if (!PROVIDERS.includes(provider as ProviderName)) return { error: "지원하지 않는 제공사입니다" };
   if (key.length < 20 || key.length > 300 || /\s/.test(key)) return { error: "API 키 형식이 올바르지 않습니다" };
 
   let encryptedKey: string;
@@ -178,32 +178,47 @@ export async function deleteApiKey(form: FormData) {
   revalidatePath("/settings");
 }
 
-// ── F013 연결 테스트: gateway를 거친 실제 호출 1회 (Haiku 5.5, 1원 미만) ──
+// ── F013 연결 테스트: gateway를 거친 실제 호출 1회 (제공사의 가장 싼 모델, 1원 미만) ──
 
-export type TestResult = { error?: string; reply?: string; costKrw?: number; todayRatio?: number; budgetDaily?: number } | undefined;
+export type TestResult = { error?: string; reply?: string; model?: string; costKrw?: number; todayRatio?: number; budgetDaily?: number } | undefined;
 
-export async function testConnection(): Promise<TestResult> {
+export async function testConnection(_prev: TestResult, form: FormData): Promise<TestResult> {
   const user = await requireUser();
   const db = getDb();
   const org = await getCurrentOrg(user.id);
   if (!org) return { error: "먼저 조직을 만들어 주세요 (비용은 조직 예산에 기록됩니다)" };
+  const provider = String(form.get("provider") ?? "anthropic") as ProviderName;
+  if (!PROVIDERS.includes(provider)) return { error: "지원하지 않는 제공사입니다" };
+
+  let model: string = DEFAULT_MODELS.economy;
+  if (provider !== "anthropic") {
+    const [cheapest] = await db
+      .select({ id: schema.llmModels.id })
+      .from(schema.llmModels)
+      .where(and(eq(schema.llmModels.provider, provider), eq(schema.llmModels.enabled, true)))
+      .orderBy(asc(schema.llmModels.outputUsd))
+      .limit(1);
+    if (!cheapest) return { error: `${PROVIDER_LABEL[provider]} 모델이 꺼져 있습니다. 아래 '모델·요금'에서 요금을 확인하고 하나 켜 주세요` };
+    model = cheapest.id;
+  }
 
   try {
     const r = await callLLM(db, {
       orgId: org.id,
       actor: { type: "USER", id: user.id },
-      purpose: "API 키 연결 테스트 (설정 화면)",
-      model: DEFAULT_MODELS.economy,
+      purpose: `API 키 연결 테스트 (설정 화면, ${PROVIDER_LABEL[provider]})`,
+      model,
       messages: [{ role: "user", content: "연결 확인입니다. '연결됨'이라고만 답해 주세요." }],
       maxTokens: 1000,
     });
     const budget = await checkBudget(db, { orgId: org.id });
-    return { reply: r.text.trim() || "(빈 응답)", costKrw: r.costKrw, todayRatio: budget.ratio, budgetDaily: org.budgetDaily };
+    return { reply: r.text.trim() || "(빈 응답)", model: r.model, costKrw: r.costKrw, todayRatio: budget.ratio, budgetDaily: org.budgetDaily };
   } catch (e) {
-    if (e instanceof EmergencyStopError || e instanceof BudgetExceededError || e instanceof MissingApiKeyError) return { error: e.message };
+    if (e instanceof EmergencyStopError || e instanceof BudgetExceededError || e instanceof MissingApiKeyError || e instanceof UnknownModelError) return { error: e.message };
     const status = (e as { status?: number }).status;
     if (status === 401) return { error: "API 키가 올바르지 않습니다 (401). 키를 다시 확인해 주세요" };
     if (status === 429) return { error: "요청이 너무 많거나 크레딧이 부족합니다 (429)" };
-    return { error: `Claude 호출에 실패했습니다${status ? ` (${status})` : ""}. 잠시 후 다시 시도해 주세요` };
+    if (status === 404) return { error: `모델 이름(${model})을 제공사가 모릅니다 (404). '모델·요금'에서 모델 이름을 확인해 주세요` };
+    return { error: `${PROVIDER_LABEL[provider]} 호출에 실패했습니다${status ? ` (${status})` : ""}. 잠시 후 다시 시도해 주세요` };
   }
 }

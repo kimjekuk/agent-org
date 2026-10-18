@@ -1,6 +1,6 @@
 import type { Avatar, ToolPermissions } from "@agentorg/shared/agents/templates";
 import { getDb, schema } from "@agentorg/shared/db";
-import { MODEL_CHOICES } from "@agentorg/shared/llm/pricing";
+import { listModelChoices } from "@agentorg/shared/llm/models";
 import { and, asc, desc, eq, inArray, ne, or } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -48,6 +48,9 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   const arts = artifactIds.length ? await db.select().from(schema.artifacts).where(inArray(schema.artifacts.id, artifactIds)) : [];
   const artById = new Map(arts.map((a) => [a.id, a]));
 
+  // 고를 수 있는 모델 (Claude + 켜진 추가 모델). 지금 쓰는 모델이 꺼졌으면 그것도 보여 준다
+  const models = await listModelChoices(db);
+  for (const id of [agent.modelPrimary, agent.modelEconomy]) if (id && !models.some((m) => m.id === id)) models.push({ id, label: `${id} (꺼짐 — 다른 모델로 바꿔 주세요)` });
   const badge = statusBadge(agent);
   const avatar = (agent.avatar ?? { hair: 0, face: 0, color: 0 }) as Avatar;
   const working = agent.status === "WORKING";
@@ -131,7 +134,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
                 avatar,
               }}
               supervisors={others}
-              models={MODEL_CHOICES}
+              models={models}
             />
           </div>
         </details>

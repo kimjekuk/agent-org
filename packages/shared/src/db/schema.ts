@@ -217,3 +217,17 @@ export const appSecrets = pgTable("app_secrets", {
   encryptedValue: text("encrypted_value").notNull(),
   createdAt: createdAt(),
 });
+
+// 추가 LLM 모델과 요금 (OpenAI·Gemini·DeepSeek 등). Claude 모델은 코드 요금표(llm/pricing.ts)에 있다.
+// 요금은 자주 바뀌므로 사용자가 설정 화면에서 공식 페이지를 보고 고친다 (2026-10-18 결정). 켜진 모델만 쓸 수 있다
+export const llmModels = pgTable("llm_models", {
+  id: text("id").primaryKey(), // 제공사 API에 보내는 모델 이름 그대로
+  provider: text("provider").notNull(), // "openai" | "gemini" | "deepseek"
+  label: text("label").notNull(),
+  inputUsd: numeric("input_usd", { precision: 10, scale: 4 }).notNull(), // 100만 토큰당 달러
+  outputUsd: numeric("output_usd", { precision: 10, scale: 4 }).notNull(),
+  cachedInputUsd: numeric("cached_input_usd", { precision: 10, scale: 4 }),
+  enabled: boolean("enabled").notNull().default(false),
+  createdAt: createdAt(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

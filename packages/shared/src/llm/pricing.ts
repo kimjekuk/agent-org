@@ -13,7 +13,7 @@ export const MODEL_CHOICES = [
   { id: "claude-opus-5-5", label: "Claude Opus 5.5 — 고급 ($4 / $20)" },
 ] as const;
 
-interface Price {
+export interface Price {
   input: number;
   output: number;
   cacheRead: number;
@@ -37,19 +37,19 @@ export function usdToKrwRate(): number {
   return Number.isFinite(rate) && rate > 0 ? rate : 1400;
 }
 
-/** 모르는 모델이면 오류. 요금표에 없는 모델은 비용을 기록할 수 없으므로 호출 자체를 막는다. */
-export function assertKnownModel(model: string) {
-  if (!PRICES[model]) throw new Error(`요금표에 없는 모델입니다: ${model}`);
+/** 코드 요금표에 있는 Claude 모델인가 (그 외 모델은 DB llm_models에서 찾는다 — llm/models.ts) */
+export function isBuiltinModel(model: string): boolean {
+  return Boolean(PRICES[model]);
 }
 
 /** 웹 검색 1회 요금 ($10 / 1,000회) */
 export const WEB_SEARCH_USD = 0.01;
 
 /** 시도별 사용량 + 웹 검색 횟수의 원화 비용 합계. 캐시 쓰기는 입력 요금의 1.25배. */
-export function costKrw(usage: LLMUsageIteration[], rate = usdToKrwRate(), webSearchRequests = 0): number {
+export function costKrw(usage: LLMUsageIteration[], rate = usdToKrwRate(), webSearchRequests = 0, extraPrices: Record<string, Price> = {}): number {
   let usd = webSearchRequests * WEB_SEARCH_USD;
   for (const u of usage) {
-    const p = PRICES[u.model];
+    const p = PRICES[u.model] ?? extraPrices[u.model];
     if (!p) throw new Error(`요금표에 없는 모델입니다: ${u.model}`);
     const totalInput = u.inputTokens + u.cacheWriteTokens + u.cacheReadTokens;
     const long = p.longThreshold !== undefined && totalInput > p.longThreshold;

@@ -8,7 +8,9 @@ import type { AnyDb } from "../db/client";
 import { apiKeys, approvalRequests, auditLogs, costLogs, organizations } from "../db/schema";
 import { notifyOrgOwner } from "../push";
 import { anthropicProvider } from "./anthropic";
-import { assertKnownModel, costKrw } from "./pricing";
+import { PROVIDER_LABEL, type ProviderName, resolveModel } from "./models";
+import { createOpenAICompatibleProvider, OPENAI_COMPATIBLE } from "./openaiCompatible";
+import { costKrw } from "./pricing";
 import type { LLMMessage, LLMProvider } from "./provider";
 
 export class EmergencyStopError extends Error {
@@ -27,7 +29,7 @@ export class BudgetExceededError extends Error {
 
 export class MissingApiKeyError extends Error {
   constructor(provider: string) {
-    super(`${provider} API 키가 등록되지 않았습니다 (설정 → API 키)`);
+    super(`${PROVIDER_LABEL[provider as ProviderName] ?? provider} API 키가 등록되지 않았습니다 (설정 → API 키)`);
     this.name = "MissingApiKeyError";
   }
 }
@@ -60,9 +62,16 @@ export interface GatewayResult {
   webSearchRequests: number;
 }
 
-const providers: Record<string, LLMProvider> = { anthropic: anthropicProvider };
+// 제공사는 모델로 정해진다 (Claude → anthropic, 그 외 → DB llm_models의 provider)
+const providers: Record<string, LLMProvider> = {
+  anthropic: anthropicProvider,
+  openai: createOpenAICompatibleProvider(OPENAI_COMPATIBLE.openai),
+  gemini: createOpenAICompatibleProvider(OPENAI_COMPATIBLE.gemini),
+  deepseek: createOpenAICompatibleProvider(OPENAI_COMPATIBLE.deepseek),
+};
 
-export async function callLLM(db: AnyDb, call: GatewayCall, provider: LLMProvider = providers.anthropic): Promise<GatewayResult> {
+/** override: 테스트용 가짜 제공사. 없으면 모델에 맞는 제공사를 쓴다 */
+export async function callLLM(db: AnyDb, call: GatewayCall, override?: LLMProvider): Promise<GatewayResult> {
   const [org] = await db.select().from(organizations).where(eq(organizations.id, call.orgId));
   if (!org) throw new Error("조직을 찾을 수 없습니다");
   if (org.emergencyStop) throw new EmergencyStopError();
@@ -75,7 +84,8 @@ export async function callLLM(db: AnyDb, call: GatewayCall, provider: LLMProvide
   if (budget.level === "WARN" || budget.level === "ECONOMY") await warnBudgetOnce(db, call, budget.ratio, budget.limitName);
   const economyMode = budget.level === "ECONOMY" && Boolean(call.economyModel);
   const model = economyMode ? call.economyModel! : call.model;
-  assertKnownModel(model);
+  const resolved = await resolveModel(db, model); // 요금표에 없거나 꺼진 모델이면 여기서 멈춘다
+  const provider = override ?? providers[resolved.provider];
 
   // API 키는 조직 소유자의 것을 쓴다 (PRD 2장: 사용자 본인 API 키)
   const [key] = await db
@@ -91,7 +101,7 @@ export async function callLLM(db: AnyDb, call: GatewayCall, provider: LLMProvide
     maxTokens: call.maxTokens ?? 16000,
     webSearchMaxUses: call.webSearchMaxUses,
   });
-  const cost = costKrw(result.usage, undefined, result.webSearchRequests);
+  const cost = costKrw(result.usage, undefined, result.webSearchRequests, resolved.price ? { [model]: resolved.price } : {});
 
   await db.transaction(async (tx) => {
     const inputTokens = result.usage.reduce((s, u) => s + u.inputTokens + u.cacheWriteTokens + u.cacheReadTokens, 0);
