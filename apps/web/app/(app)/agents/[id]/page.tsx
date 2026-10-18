@@ -112,7 +112,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
       <DirectiveForm agentId={agent.id} />
 
       <section className="flex flex-col gap-4 px-4 pb-12">
-        <details className={card}>
+        <details id="profile" className={`${card} scroll-mt-20`}>
           <summary className="cursor-pointer font-semibold">프로필 · 모델 · 도구 권한 · 예산</summary>
           <div className="pt-3">
             <ProfileForm

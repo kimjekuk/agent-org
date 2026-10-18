@@ -19,7 +19,8 @@
     "./events": "./src/events.ts",
     "./queue": "./src/queue.ts",
     "./agents/templates": "./src/agents/templates.ts",
-    "./missions": "./src/missions.ts"
+    "./missions": "./src/missions.ts",
+    "./push": "./src/push.ts"
   },
   "scripts": {
     "typecheck": "tsc",
@@ -31,11 +32,13 @@
     "bullmq": "^5.81.5",
     "drizzle-orm": "0.45.4",
     "ioredis": "^5.11.1",
-    "postgres": "3.4.9"
+    "postgres": "3.4.9",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.10",
     "@types/node": "^20.19.43",
+    "@types/web-push": "^3.6.4",
     "drizzle-kit": "0.31.11",
     "vitest": "^3.2.7"
   }

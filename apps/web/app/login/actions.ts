@@ -8,7 +8,7 @@ export async function login(_prev: string | undefined, form: FormData): Promise<
     await signIn("credentials", {
       email: form.get("email"),
       password: form.get("password"),
-      redirectTo: "/agents",
+      redirectTo: "/dashboard",
     });
   } catch (e) {
     if (e instanceof AuthError) return "이메일 또는 비밀번호가 맞지 않습니다";
