@@ -1,7 +1,7 @@
 import type { Avatar } from "@agentorg/shared/agents/templates";
 import { levelFor, spentToday } from "@agentorg/shared/budget";
 import { getDb, schema } from "@agentorg/shared/db";
-import { and, asc, count, desc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import Link from "next/link";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { RANK_LABEL, statusBadge } from "@/lib/agents";
@@ -202,8 +202,9 @@ async function collectBriefing(orgId: string, since: Date): Promise<{ lines: { t
   const db = getDb();
   const [done, tasksDone, reports, blocked, waiting] = await Promise.all([
     db
-      .select({ id: schema.auditLogs.targetId, title: schema.auditLogs.reasoning })
+      .select({ id: schema.missions.id, title: schema.missions.title })
       .from(schema.auditLogs)
+      .innerJoin(schema.missions, eq(sql`${schema.missions.id}::text`, schema.auditLogs.targetId))
       .where(and(eq(schema.auditLogs.orgId, orgId), eq(schema.auditLogs.action, "mission.complete"), gte(schema.auditLogs.createdAt, since))),
     db
       .select({ n: count() })
@@ -223,7 +224,7 @@ async function collectBriefing(orgId: string, since: Date): Promise<{ lines: { t
       .where(and(eq(schema.approvalRequests.orgId, orgId), eq(schema.approvalRequests.status, "PENDING"), gte(schema.approvalRequests.createdAt, since))),
   ]);
   const lines: { text: string; href?: string }[] = [];
-  for (const m of done) lines.push({ text: `🏁 ${m.title ?? "미션 완료"}`, href: `/missions/${m.id}` });
+  for (const m of done) lines.push({ text: `🏁 미션 완료: ${m.title}`, href: `/missions/${m.id}` });
   if (tasksDone[0]?.n) lines.push({ text: `✅ 끝난 Task ${tasksDone[0].n}개` });
   if (reports[0]?.n) lines.push({ text: `📨 나에게 온 보고 ${reports[0].n}개`, href: "/missions" });
   for (const a of blocked) lines.push({ text: `⛔ ${a.name}이(가) 막혀 있습니다`, href: `/agents/${a.id}` });
