@@ -7,7 +7,7 @@ import { button, buttonDanger, buttonGhost, card, input } from "@/lib/ui";
 import { logout } from "@/app/login/actions";
 import { deleteApiKey, deleteOrg, selectOrg } from "./actions";
 import { ApiKeyForm, CreateOrgForm, RenameOrgForm, TestConnectionForm } from "./forms";
-import { saveFallbackModel, toggleModel } from "./model-actions";
+import { saveBudgetDaily, saveFallbackModel, toggleModel } from "./model-actions";
 import { DeleteModelForm, ModelForm } from "./model-forms";
 
 export const dynamic = "force-dynamic";
@@ -162,6 +162,24 @@ export default async function SettingsPage() {
           </div>
         </details>
       </section>
+
+      {currentOrg && (
+        <section className={`${card} flex flex-col gap-3`} aria-label="하루 예산">
+          <h2 className="font-semibold">하루 예산</h2>
+          <p className="text-sm opacity-70">
+            {currentOrg.name}이(가) 하루에 AI에 쓸 수 있는 금액입니다. 80%부터 절약 모델로 바꾸고, 다 쓰면 그날은 멈춥니다. Max 5x 월 API 크레딧($100 ≈ 14만 원) 안에서 쓰려면 하루 4,000원 이하가 안전합니다.
+          </p>
+          <form key={currentOrg.budgetDaily} action={saveBudgetDaily} className="flex gap-2">
+            <label className="flex flex-1 items-center gap-2">
+              <input name="budgetDaily" type="number" inputMode="numeric" min={100} max={1000000} step={100} required defaultValue={currentOrg.budgetDaily} className={input} aria-label="하루 예산(원)" />
+              <span className="shrink-0 text-sm">원</span>
+            </label>
+            <button type="submit" className={`${button} shrink-0`}>
+              저장
+            </button>
+          </form>
+        </section>
+      )}
 
       {currentOrg && (
         <section className={`${card} flex flex-col gap-3`} aria-label="장애 시 대체 모델">

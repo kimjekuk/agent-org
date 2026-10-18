@@ -1,7 +1,7 @@
 "use server";
 
 // F005 에이전트 채용·프로필 · F009 사용자 직접 지시. 모든 변경은 AuditLog에 기록한다 (CLAUDE.md 절대 규칙 4).
-import { AGENT_DEFAULTS, type AgentTemplate, CONTENT_TEAM, ROLE_TEMPLATES, type ToolPermissions } from "@agentorg/shared/agents/templates";
+import { AGENT_DEFAULTS, type AgentTemplate, CONTENT_TEAM, defaultModelFor, ROLE_TEMPLATES, type ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import { type AnyDb, getDb, schema } from "@agentorg/shared/db";
 import { publishOrgEvent } from "@agentorg/shared/events";
@@ -35,7 +35,7 @@ async function insertAgent(db: AnyDb, orgId: string, userId: string, t: AgentTem
       avatar: t.avatar,
       toolPermissions: t.toolPermissions,
       supervisorId,
-      modelPrimary: AGENT_DEFAULTS.modelPrimary,
+      modelPrimary: defaultModelFor(t.toolPermissions),
       modelEconomy: AGENT_DEFAULTS.modelEconomy,
       maxTurns: AGENT_DEFAULTS.maxTurns,
     })

@@ -48,3 +48,8 @@ export const AGENT_DEFAULTS = {
   modelEconomy: DEFAULT_MODELS.economy,
   maxTurns: 20,
 } as const;
+
+/** 채용할 때의 기본 모델: 웹 검색 권한이 있으면 검색되는 Sonnet, 아니면 Haiku (2026-10-18 결정) */
+export function defaultModelFor(perms: ToolPermissions): string {
+  return perms.web_search ? DEFAULT_MODELS.search : DEFAULT_MODELS.primary;
+}
