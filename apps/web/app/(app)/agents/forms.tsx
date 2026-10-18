@@ -41,11 +41,12 @@ export function DirectiveForm({ agentId, disabled }: { agentId: string; disabled
   const ref = useRef<HTMLTextAreaElement>(null);
   return (
     <form
+      id="directive"
       action={async (fd) => {
         await action(fd);
         if (ref.current) ref.current.value = "";
       }}
-      className="sticky bottom-0 flex flex-col gap-1 border-t border-black/10 bg-background/95 p-3 backdrop-blur dark:border-white/15"
+      className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 flex flex-col gap-1 border-t border-black/10 bg-background/95 p-3 backdrop-blur dark:border-white/15"
     >
       <input type="hidden" name="id" value={agentId} />
       <div className="flex items-end gap-2">

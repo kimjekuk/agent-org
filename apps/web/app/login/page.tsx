@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ setup?: string }> }) {
   if (!(await hasAnyUser())) redirect("/setup");
-  if (await getSessionUser()) redirect("/agents");
+  if (await getSessionUser()) redirect("/dashboard");
   const { setup } = await searchParams;
 
   return (
