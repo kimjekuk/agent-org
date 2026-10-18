@@ -1,6 +1,7 @@
 import type { Avatar, ToolPermissions } from "@agentorg/shared/agents/templates";
 import { getDb, schema } from "@agentorg/shared/db";
 import { listModelChoices } from "@agentorg/shared/llm/models";
+import { MEMORY_LABEL } from "@agentorg/shared/memory";
 import { and, asc, desc, eq, inArray, ne, or } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -11,6 +12,8 @@ import { requireUser } from "@/lib/session";
 import { buttonDanger, buttonGhost, card } from "@/lib/ui";
 import { cloneAgent, deleteAgent, toggleActive, togglePause } from "../actions";
 import { DirectiveForm, ProfileForm } from "../forms";
+import { deleteMemory, resetMemories } from "../memory-actions";
+import { AddMemoryForm, EditMemoryForm } from "../memory-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +54,12 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   // 고를 수 있는 모델 (Claude + 켜진 추가 모델). 지금 쓰는 모델이 꺼졌으면 그것도 보여 준다
   const models = await listModelChoices(db);
   for (const id of [agent.modelPrimary, agent.modelEconomy]) if (id && !models.some((m) => m.id === id)) models.push({ id, label: `${id} (꺼짐 — 다른 모델로 바꿔 주세요)` });
+  // F101 기억 (장기·중기·단기)
+  const mems = await db.select().from(schema.memories).where(eq(schema.memories.agentId, agent.id)).orderBy(desc(schema.memories.createdAt));
+  const missionIds = [...new Set(mems.map((m) => m.missionId).filter((x): x is string => Boolean(x)))];
+  const missionTitle = new Map(
+    (missionIds.length ? await db.select({ id: schema.missions.id, title: schema.missions.title }).from(schema.missions).where(inArray(schema.missions.id, missionIds)) : []).map((m) => [m.id, m.title]),
+  );
   const badge = statusBadge(agent);
   const avatar = (agent.avatar ?? { hair: 0, face: 0, color: 0 }) as Avatar;
   const working = agent.status === "WORKING";
@@ -136,6 +145,64 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
               supervisors={others}
               models={models}
             />
+          </div>
+        </details>
+
+        <details id="memory" className={`${card} scroll-mt-20`}>
+          <summary className="cursor-pointer font-semibold">🧠 기억 {mems.length}개</summary>
+          <div className="flex flex-col gap-3 pt-3">
+            <p className="text-sm opacity-70">일을 마칠 때 스스로 적은 &lsquo;기억할 점&rsquo;과 미션 교훈입니다. 다음 일에 참고하지만, 내 지시가 항상 우선합니다.</p>
+            {(["LONG", "MID", "SHORT"] as const).map((scope) => {
+              const list = mems.filter((m) => m.scope === scope);
+              if (list.length === 0) return null;
+              return (
+                <div key={scope} className="flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold">
+                    {MEMORY_LABEL[scope]} <span className="opacity-60">{list.length}</span>
+                  </h3>
+                  <ul className="flex flex-col gap-2">
+                    {list.map((m) => (
+                      <li key={m.id} className="rounded-lg bg-black/5 p-3 text-sm dark:bg-white/10">
+                        <details>
+                          <summary className="cursor-pointer list-none">
+                            {m.content}
+                            <span className="block text-xs opacity-60">
+                              {timeFmt.format(m.createdAt)}
+                              {m.missionId && missionTitle.get(m.missionId) ? ` · ${missionTitle.get(m.missionId)}` : ""}
+                              {m.source?.startsWith("user") ? " · 직접 입력·수정" : ""}
+                            </span>
+                          </summary>
+                          <div className="mt-2 flex flex-col gap-2">
+                            <EditMemoryForm agentId={agent.id} id={m.id} content={m.content} />
+                            <form action={deleteMemory}>
+                              <input type="hidden" name="agentId" value={agent.id} />
+                              <input type="hidden" name="id" value={m.id} />
+                              <button type="submit" className={`${buttonGhost} w-full text-red-600 dark:text-red-400`}>
+                                지우기
+                              </button>
+                            </form>
+                          </div>
+                        </details>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+            {mems.length === 0 && <p className="text-sm opacity-60">아직 기억이 없습니다. 일을 하면 쌓입니다.</p>}
+            <AddMemoryForm agentId={agent.id} />
+            {mems.length > 0 && (
+              <details>
+                <summary className="cursor-pointer py-2 text-sm text-red-600 dark:text-red-400">기억 전체 초기화</summary>
+                <form action={resetMemories} className="flex flex-col gap-2 pt-1">
+                  <input type="hidden" name="agentId" value={agent.id} />
+                  <p className="text-sm opacity-80">&ldquo;{agent.name}&rdquo;의 기억 {mems.length}개를 모두 지웁니다. 되돌릴 수 없습니다.</p>
+                  <button type="submit" className={buttonDanger}>
+                    정말 초기화
+                  </button>
+                </form>
+              </details>
+            )}
           </div>
         </details>
 
