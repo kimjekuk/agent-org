@@ -11,6 +11,8 @@ export interface AgentPromptParts {
   skills?: string[];
   /** 역할별 추가 지침 */
   instructions?: string;
+  /** F101 기억 (참고용) */
+  memory?: string;
 }
 
 export function buildSystemPrompt(parts: AgentPromptParts): string {
@@ -21,5 +23,6 @@ export function buildSystemPrompt(parts: AgentPromptParts): string {
   if (parts.personality) lines.push(`성격: ${parts.personality}`);
   if (parts.skills?.length) lines.push(`특기: ${parts.skills.join(", ")}`);
   if (parts.instructions) lines.push(`# 지침\n${parts.instructions}`);
+  if (parts.memory) lines.push(`# 기억\n${parts.memory}`);
   return lines.join("\n\n");
 }

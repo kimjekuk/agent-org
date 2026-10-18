@@ -17,6 +17,7 @@ import {
   missionKind,
   needsCheckpoint,
 } from "@agentorg/shared/missions";
+import { clearMemoriesBySource, extractSection, LESSON_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
 import { notifyOrgOwner } from "@agentorg/shared/push";
 import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { StopReason } from "../guards";
@@ -347,13 +348,18 @@ class Leader {
       this.brief(),
       `# 팀원 결과\n${parts.join("\n\n")}`,
       `위 결과를 통합해 최종 ${this.mission.outputFormat ?? "보고서"}를 한국어 마크다운으로 작성하라. 첫 줄은 '# 제목'.`,
-      "팀원 결과에 있는 출처(URL)는 유지한다. 맨 끝에 '## 성공 기준 점검'으로 기준마다 충족 여부를 체크리스트로 적는다.",
+      "팀원 결과에 있는 출처(URL)는 유지한다. 끝부분에 '## 성공 기준 점검'으로 기준마다 충족 여부를 체크리스트로 적는다.",
+      `맨 끝에 '## ${LESSON_HEADING}'을 두고, 이 미션에서 팀이 다음에 기억할 교훈을 1~3줄로 적는다 (없으면 '없음').`,
       previous ? `# 이전 최종 결과\n${clip(previous.content, 12000)}\n\n사용자 수정 요청: ${comment}\n위 요청을 반영해 다시 작성하라.` : "",
     ]
       .filter(Boolean)
       .join("\n\n");
     const r = await this.ask(comment ? "최종 결과 수정" : "최종 결과 통합", prompt, 16000);
-    const text = r.text || "(빈 응답)";
+    // F101: 최종 결과 끝의 '## 팀 교훈'은 떼어 참여자 모두의 장기 기억으로 저장한다
+    const { body, items: lessons } = extractSection(r.text, LESSON_HEADING);
+    const text = body || "(빈 응답)";
+    const participants = [...new Set([this.leader.id, ...list.map((t) => t.assigneeId).filter((x): x is string => Boolean(x))])];
+    const lessonSource = `mission:${this.mission.id}:lessons`;
     const title = titleOf(text);
     const canSave = Boolean(((this.leader.toolPermissions ?? {}) as ToolPermissions).document);
     const checkpoint = needsCheckpoint(this.autonomy, "FINAL");
@@ -377,6 +383,11 @@ class Leader {
         id = art.id;
       }
       if (checkpoint) await tx.update(missions).set({ status: "REVIEW" }).where(eq(missions.id, this.mission.id));
+      // 다시 통합하면(최종 거절 후) 이전 교훈을 바꾼다
+      await clearMemoriesBySource(tx, participants, lessonSource);
+      for (const agentId of participants) {
+        await saveMemories(tx, { orgId: this.mission.orgId, agentId, scope: "LONG", missionId: this.mission.id, source: lessonSource, items: lessons });
+      }
       await tx.update(messages).set({ readAt: new Date() }).where(eq(messages.id, msg.id));
       await writeAudit(tx, {
         orgId: this.mission.orgId,
@@ -513,6 +524,7 @@ class Leader {
   private async ask(purpose: string, prompt: string, maxTokens: number) {
     const perms = (this.leader.toolPermissions ?? {}) as ToolPermissions;
     const skills = (this.leader.skills ?? []) as string[];
+    const memory = await memoryContext(this.db, this.leader.id, this.mission.id); // F101
     return callLLM(
       this.db,
       {
@@ -535,6 +547,7 @@ class Leader {
           ]
             .filter(Boolean)
             .join("\n"),
+          memory,
         }),
         messages: [{ role: "user", content: prompt }],
         maxTokens,
