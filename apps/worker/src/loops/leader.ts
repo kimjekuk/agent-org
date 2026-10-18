@@ -4,12 +4,13 @@
 import type { ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
-import { agents, approvalRequests, artifacts, messages, missions, tasks } from "@agentorg/shared/db/schema";
-import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError } from "@agentorg/shared/llm/gateway";
+import { agents, approvalRequests, artifacts, costLogs, messages, missions, tasks } from "@agentorg/shared/db/schema";
+import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError, MissionCallLimitError } from "@agentorg/shared/llm/gateway";
 import { DEFAULT_MODELS } from "@agentorg/shared/llm/pricing";
 import {
   type ApprovalPayload,
   type Autonomy,
+  CALL_LIMIT_STEP,
   type CheckpointStage,
   MAX_FAILS,
   MAX_REJECTS,
@@ -19,7 +20,7 @@ import {
 } from "@agentorg/shared/missions";
 import { clearMemoriesBySource, extractSection, LESSON_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
 import { notifyOrgOwner } from "@agentorg/shared/push";
-import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import type { StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
 import { type Agent, clip, type Deps, type Message, type Mission, preview, setStatus, titleOf } from "./common";
@@ -52,6 +53,7 @@ export async function handleLeaderMessage(db: Db, leader: Agent, mission: Missio
     else if (kind === "APPROVAL") await lead.applyApproval(msg);
     else if (kind === "NOTE") await lead.replyToNote(msg);
     else if (kind === "FINALIZE") await lead.finalize(msg);
+    else if (kind === "RESUME") await lead.resume(msg);
     else if (kind === "TASK_MOVED") {
       await markRead(db, msg);
       await lead.advance();
@@ -67,6 +69,11 @@ export async function handleLeaderMessage(db: Db, leader: Agent, mission: Missio
       await lead.tellUser(`예산 한도(${e.limitName ?? "예산"})에 도달해 미션을 멈췄습니다. 승인 대기함에서 결정해 주세요.`, { failed: true });
       await setStatus(db, leader, "BLOCKED", "예산 초과로 중단", deps.publish);
       return "BUDGET";
+    }
+    if (e instanceof MissionCallLimitError) {
+      // 메시지는 읽지 않은 채로 둔다 → 사용자가 '계속'을 승인하면 이어서 처리
+      await setStatus(db, leader, "BLOCKED", "미션 AI 호출 상한 — 승인 대기", deps.publish);
+      return "CALL_LIMIT";
     }
     if (e instanceof MissingApiKeyError) {
       await lead.tellUser(e.message, { failed: true });
@@ -85,6 +92,7 @@ const KIND_LABEL: Record<string, string> = {
   NOTE: "사용자 메시지 답변",
   FINALIZE: "최종 결과 통합",
   TASK_MOVED: "Task 이동 반영",
+  RESUME: "멈춘 미션 이어서 진행",
   REPORT: "보고 검토",
 };
 
@@ -482,13 +490,95 @@ class Leader {
       await this.changed();
       return this.advance();
     }
-    if (ap.type === "QUESTION" && p.retryMessageId) {
-      // 리더가 처리하다 실패한 메시지를 다시 읽지 않은 상태로 돌려 다음 턴에 재시도
-      if (approved) await this.db.update(messages).set({ readAt: null }).where(eq(messages.id, p.retryMessageId));
+    if (ap.type === "QUESTION" && p.reason === "CALL_LIMIT") {
       await markRead(this.db, msg);
+      if (!approved) return this.pauseMission("사용자가 AI 호출 상한에서 멈추기로 했습니다");
+      const [{ used }] = await this.db.select({ used: count() }).from(costLogs).where(eq(costLogs.missionId, this.mission.id));
+      const limit = Math.max(this.mission.callLimit, used) + CALL_LIMIT_STEP;
+      await this.db.transaction(async (tx) => {
+        await tx.update(missions).set({ callLimit: limit }).where(eq(missions.id, this.mission.id));
+        await writeAudit(tx, {
+          orgId: this.mission.orgId,
+          actorType: "AGENT",
+          actorId: this.leader.id,
+          action: "mission.call_limit_raise",
+          targetType: "mission",
+          targetId: this.mission.id,
+          reasoning: `사용자 승인으로 AI 호출 상한 ${this.mission.callLimit} → ${limit}회`,
+        });
+      });
+      this.mission = { ...this.mission, callLimit: limit };
+      // 상한에 막혀 멈춘 팀원들이 남은 일을 이어서 하게 한다
+      const waiting = await this.db
+        .selectDistinct({ agentId: messages.receiverAgentId })
+        .from(messages)
+        .where(and(eq(messages.missionId, this.mission.id), isNull(messages.readAt), isNotNull(messages.receiverAgentId), ne(messages.receiverAgentId, this.leader.id)));
+      for (const w of waiting) if (w.agentId) await this.deps.enqueue({ orgId: this.mission.orgId, agentId: w.agentId });
+      await this.tellUser(`AI 호출 상한을 ${limit}회로 늘려 이어서 진행합니다.`);
+      return this.advance();
+    }
+    if (ap.type === "QUESTION" && p.retryMessageId) {
+      // 리더가 처리하다 실패한 메시지를 다시 읽지 않은 상태로 돌려 다음 턴에 재시도. 거절하면 일시정지 (자동 재개가 다시 시작하지 않게)
+      await markRead(this.db, msg);
+      if (approved) await this.db.update(messages).set({ readAt: null }).where(eq(messages.id, p.retryMessageId));
+      else await this.pauseMission("리더 처리 실패 후 사용자가 다시 시도하지 않기로 했습니다");
       return;
     }
     await markRead(this.db, msg);
+  }
+
+  /**
+   * F109 체크포인트 재개: 멈춘 미션을 마지막으로 끝난 단계 다음부터 이어서 진행한다.
+   * 계획이 없으면 계획부터, 진행 중이던 Task가 처리 중인 메시지 없이 멈춰 있으면 다시 지시하고, 그 외에는 다음 단계로.
+   */
+  async resume(msg: Message) {
+    const list = await this.tasks();
+    if (list.length === 0) return this.plan(msg);
+    await markRead(this.db, msg);
+    const open = await this.db
+      .select({ taskId: messages.taskId })
+      .from(messages)
+      .where(and(eq(messages.missionId, this.mission.id), isNull(messages.readAt), isNotNull(messages.taskId)));
+    const approvals = await this.db
+      .select({ taskId: approvalRequests.taskId })
+      .from(approvalRequests)
+      .where(and(eq(approvalRequests.missionId, this.mission.id), inArray(approvalRequests.status, ["PENDING", "HELD"])));
+    const busy = new Set([...open, ...approvals].map((r) => r.taskId));
+    const stuck = list.filter((t) => (t.status === "DOING" || t.status === "REVIEW") && !busy.has(t.id));
+    if (stuck.length) {
+      await this.db.transaction(async (tx) => {
+        await tx.update(tasks).set({ status: "TODO" }).where(inArray(tasks.id, stuck.map((t) => t.id)));
+        await writeAudit(tx, {
+          orgId: this.mission.orgId,
+          actorType: "AGENT",
+          actorId: this.leader.id,
+          action: "mission.resume",
+          targetType: "mission",
+          targetId: this.mission.id,
+          reasoning: `처리가 끊긴 Task를 다시 진행: ${stuck.map((t) => t.title).join(", ")}`,
+        });
+      });
+    }
+    const done = list.filter((t) => t.status === "DONE").length;
+    await this.tellUser(`멈춘 미션을 이어서 진행합니다 (Task ${done}/${list.length} 완료${stuck.length ? `, 끊긴 Task ${stuck.length}개 다시 진행` : ""}).`);
+    return this.advance();
+  }
+
+  /** 미션 일시정지 (사용자가 거절한 질문의 결과). 미션 화면에서 재개하면 이어서 진행한다 */
+  private async pauseMission(reason: string) {
+    await this.db.transaction(async (tx) => {
+      await tx.update(missions).set({ status: "PAUSED" }).where(and(eq(missions.id, this.mission.id), eq(missions.status, "RUNNING")));
+      await writeAudit(tx, {
+        orgId: this.mission.orgId,
+        actorType: "AGENT",
+        actorId: this.leader.id,
+        action: "mission.pause",
+        targetType: "mission",
+        targetId: this.mission.id,
+        reasoning: reason,
+      });
+    });
+    await this.tellUser(`${reason}. 미션을 일시정지했습니다. 미션 화면에서 재개하거나 취소할 수 있습니다.`);
   }
 
   /** 사용자가 미션 대화에 끼어든 메시지에 짧게 답한다. 이 메시지는 이후 Task 지시에 '사용자 추가 지시'로 함께 간다 */
@@ -513,7 +603,7 @@ class Leader {
     await this.requestApproval(
       "QUESTION",
       undefined,
-      `리더 ${this.leader.name}이(가) "${KIND_LABEL[kind]}"에 실패했습니다: ${error}\n\n승인 = 다시 시도 / 거절 = 그대로 두기 (미션을 취소하려면 미션 화면에서)`,
+      `리더 ${this.leader.name}이(가) "${KIND_LABEL[kind]}"에 실패했습니다: ${error}\n\n승인 = 다시 시도 / 거절 = 미션 일시정지 (나중에 미션 화면에서 재개·취소)`,
       { reason: "LEADER_FAILED", retryMessageId: msg.id },
       msg.taskId,
     );

@@ -14,7 +14,8 @@ export interface TurnContext {
   turn: number;
 }
 
-export type StopReason = "EMERGENCY_STOP" | "AGENT_INACTIVE" | "AGENT_PAUSED" | "BUDGET" | "MAX_TURNS";
+/** CALL_LIMIT: 미션 AI 호출 상한 도달 (F109, gateway가 판단) */
+export type StopReason = "EMERGENCY_STOP" | "AGENT_INACTIVE" | "AGENT_PAUSED" | "BUDGET" | "MAX_TURNS" | "CALL_LIMIT";
 
 export type GuardDecision =
   | { action: "STOP"; reason: StopReason; detail?: string }

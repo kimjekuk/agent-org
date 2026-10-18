@@ -6,7 +6,7 @@ import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
 import { agents, artifacts, messages, missions, organizations, tasks } from "@agentorg/shared/db/schema";
 import { publishOrgEvent } from "@agentorg/shared/events";
-import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError } from "@agentorg/shared/llm/gateway";
+import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError, MissionCallLimitError } from "@agentorg/shared/llm/gateway";
 import { DEFAULT_MODELS, isBuiltinModel } from "@agentorg/shared/llm/pricing";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
 import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
@@ -228,6 +228,11 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
       await report(db, job, agent, msg, `예산 한도(${e.limitName ?? "예산"})에 도달해 멈췄습니다. 승인 대기함에서 결정해 주세요.`, false, deps);
       await setStatus(db, agent, "BLOCKED", "예산 초과로 중단", publish);
       return "BUDGET";
+    }
+    if (e instanceof MissionCallLimitError) {
+      // 지시는 읽지 않은 채로 둔다 → 사용자가 '계속'을 승인하면 이어서 처리
+      await setStatus(db, agent, "BLOCKED", "미션 AI 호출 상한 — 승인 대기", publish);
+      return "CALL_LIMIT";
     }
     if (e instanceof MissingApiKeyError) {
       await report(db, job, agent, msg, e.message, false, deps);

@@ -59,6 +59,7 @@ export const organizations = pgTable("organizations", {
   budgetMonthly: integer("budget_monthly"),
   budgetDaily: integer("budget_daily").notNull().default(20000), // PRD 11장 초기값
   workHours: jsonb("work_hours"),
+  fallbackModel: text("fallback_model"), // F109 API 장애 시 대체 모델 (없으면 대체 없이 실패 처리)
   createdAt: createdAt(),
 });
 
@@ -100,6 +101,7 @@ export const missions = pgTable("missions", {
   leaderId: uuid("leader_id").references(() => agents.id, { onDelete: "set null" }),
   scheduleId: uuid("schedule_id").references((): AnyPgColumn => schedules.id, { onDelete: "set null" }), // F106 반복·예약으로 만든 미션
   status: missionStatus("status").notNull().default("DRAFT"),
+  callLimit: integer("call_limit").notNull().default(60), // F109 무한 반복 차단: 미션의 AI 호출 상한 (승인하면 늘어남)
   createdAt: createdAt(),
 });
 
