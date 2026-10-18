@@ -23,7 +23,8 @@
     "./agents/templates": "./src/agents/templates.ts",
     "./missions": "./src/missions.ts",
     "./push": "./src/push.ts",
-    "./schedule": "./src/schedule.ts"
+    "./schedule": "./src/schedule.ts",
+    "./memory": "./src/memory.ts"
   },
   "scripts": {
     "typecheck": "tsc",

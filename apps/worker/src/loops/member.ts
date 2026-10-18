@@ -10,6 +10,7 @@ import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError } 
 import { DEFAULT_MODELS, isBuiltinModel } from "@agentorg/shared/llm/pricing";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
 import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
+import { extractSection, MEMO_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
 import { allowedAfterHours, isWithinWorkHours, parseWorkHours } from "@agentorg/shared/schedule";
 import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import { runTurn, type StopReason } from "../guards";
@@ -127,14 +128,16 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
         purpose: `지시 처리: ${preview(msg.content)}`,
         model: agent.modelPrimary ?? DEFAULT_MODELS.primary,
         economyModel: agent.modelEconomy ?? DEFAULT_MODELS.economy,
-        system: systemPromptFor(agent, perms),
+        system: systemPromptFor(agent, perms, await memoryContext(db, agent.id, msg.missionId)),
         messages: [{ role: "user", content: msg.content }],
         webSearchMaxUses: perms.web_search ? WEB_SEARCH_MAX_USES : undefined,
       },
       provider,
     );
 
-    const text = r.text.trim();
+    // F101: 결과 끝의 '## 기억할 점'은 떼어 기억으로 저장한다 (산출물·보고에는 남기지 않음)
+    const { body, items: memo } = extractSection(r.text.trim(), MEMO_HEADING);
+    const text = body;
     await db.transaction(async (tx) => {
       let artifactId: string | null = null;
       let title: string | null = null;
@@ -192,6 +195,14 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
         .returning({ id: messages.id });
       await tx.update(messages).set({ readAt: new Date() }).where(eq(messages.id, msg.id));
       if (msg.taskId) await tx.update(tasks).set({ status: "REVIEW" }).where(and(eq(tasks.id, msg.taskId), eq(tasks.status, "DOING")));
+      await saveMemories(tx, {
+        orgId: job.orgId,
+        agentId: agent.id,
+        scope: msg.missionId ? "MID" : "SHORT",
+        missionId: msg.missionId,
+        source: `message:${msg.id}`,
+        items: memo,
+      });
       await writeAudit(tx, {
         orgId: job.orgId,
         actorType: "AGENT",
@@ -230,7 +241,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
   }
 }
 
-function systemPromptFor(agent: Agent, perms: ToolPermissions): string {
+function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string): string {
   // 웹 검색은 Claude 모델만 (2026-10-18 결정). 다른 회사 모델이면 권한이 있어도 검색 없이 진행한다
   const canSearch = perms.web_search && isBuiltinModel(agent.modelPrimary ?? DEFAULT_MODELS.primary);
   const skills = (agent.skills ?? []) as string[];
@@ -241,6 +252,7 @@ function systemPromptFor(agent: Agent, perms: ToolPermissions): string {
     canSearch
       ? "필요하면 웹 검색으로 최신 정보를 확인한다."
       : "웹 검색 권한이 없다. 알고 있는 지식으로만 작성하고, 최신 정보가 필요하면 그렇다고 밝힌다.",
+    `맨 끝에 '## ${MEMO_HEADING}'을 두고, 다음에 비슷한 일을 할 때 도움이 될 점을 1~3줄로 적는다 (없으면 '없음').`,
   ];
   return buildSystemPrompt({
     name: agent.name,
@@ -248,6 +260,7 @@ function systemPromptFor(agent: Agent, perms: ToolPermissions): string {
     personality: agent.personality,
     skills,
     instructions: rules.map((r) => `- ${r}`).join("\n"),
+    memory,
   });
 }
 
