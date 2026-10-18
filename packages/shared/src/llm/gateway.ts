@@ -1,11 +1,12 @@
 // 모든 LLM 호출의 단일 진입점 (CLAUDE.md 절대 규칙 2, PRD 9장 "비용").
 // 순서: 긴급 정지 확인 → 예산 확인(80% 절약 모델, 100% 중단) → 키 복호화 → 호출 → CostLog·AuditLog 기록
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { writeAudit } from "../audit";
 import { checkBudget } from "../budget";
 import { decryptSecret } from "../crypto";
 import type { AnyDb } from "../db/client";
-import { apiKeys, approvalRequests, costLogs, organizations } from "../db/schema";
+import { apiKeys, approvalRequests, auditLogs, costLogs, organizations } from "../db/schema";
+import { notifyOrgOwner } from "../push";
 import { anthropicProvider } from "./anthropic";
 import { assertKnownModel, costKrw } from "./pricing";
 import type { LLMMessage, LLMProvider } from "./provider";
@@ -71,6 +72,7 @@ export async function callLLM(db: AnyDb, call: GatewayCall, provider: LLMProvide
     await requestBudgetApproval(db, call, budget.limitName);
     throw new BudgetExceededError(budget.limitName);
   }
+  if (budget.level === "WARN" || budget.level === "ECONOMY") await warnBudgetOnce(db, call, budget.ratio, budget.limitName);
   const economyMode = budget.level === "ECONOMY" && Boolean(call.economyModel);
   const model = economyMode ? call.economyModel! : call.model;
   assertKnownModel(model);
@@ -133,6 +135,27 @@ export async function callLLM(db: AnyDb, call: GatewayCall, provider: LLMProvide
   return { text: result.text, model: result.model, stopReason: result.stopReason, costKrw: cost, economyMode, webSearchRequests: result.webSearchRequests };
 }
 
+/** 예산 70% 경고 (PRD F013) — 조직당 하루 한 번 감사 로그 + 웹 푸시 (F017) */
+async function warnBudgetOnce(db: AnyDb, call: GatewayCall, ratio: number, limitName: string | null) {
+  const startOfToday = sql`(date_trunc('day', now() at time zone 'Asia/Seoul') at time zone 'Asia/Seoul')`;
+  const [warned] = await db
+    .select({ id: auditLogs.id })
+    .from(auditLogs)
+    .where(and(eq(auditLogs.orgId, call.orgId), eq(auditLogs.action, "budget.warn"), gte(auditLogs.createdAt, startOfToday)))
+    .limit(1);
+  if (warned) return;
+  const pct = Math.round(ratio * 100);
+  await writeAudit(db, {
+    orgId: call.orgId,
+    actorType: "SYSTEM",
+    action: "budget.warn",
+    targetType: "organization",
+    targetId: call.orgId,
+    reasoning: `${limitName ?? "예산"} ${pct}% 사용 — 80%부터 절약 모델, 100%에서 중단`,
+  });
+  await notifyOrgOwner(db, call.orgId, { title: "⚠️ 예산 경고", body: `${limitName ?? "예산"}의 ${pct}%를 썼습니다`, url: "/dashboard", tag: "budget-warn" });
+}
+
 /** 예산 초과 시 사용자 결정을 요청한다. 같은 조직에 대기 중인 BUDGET 요청이 있으면 새로 만들지 않는다. */
 async function requestBudgetApproval(db: AnyDb, call: GatewayCall, limitName: string | null) {
   await db.transaction(async (tx) => {
@@ -159,5 +182,8 @@ async function requestBudgetApproval(db: AnyDb, call: GatewayCall, limitName: st
       targetId: req.id,
       reasoning: `${limitName} 100% 도달 — LLM 호출 차단`,
     });
+    return req.id;
+  }).then(async (reqId) => {
+    if (reqId) await notifyOrgOwner(db, call.orgId, { title: "⛔ 예산 한도 도달", body: `${limitName ?? "예산"}을 모두 써서 멈췄습니다. 결정해 주세요`, url: `/approvals/${reqId}`, tag: "budget-stop" });
   });
 }

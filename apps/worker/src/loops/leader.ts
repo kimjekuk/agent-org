@@ -17,6 +17,7 @@ import {
   missionKind,
   needsCheckpoint,
 } from "@agentorg/shared/missions";
+import { notifyOrgOwner } from "@agentorg/shared/push";
 import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
@@ -415,6 +416,13 @@ class Leader {
       artifactId,
       ...(r ? { costKrw: Number(r.costKrw.toFixed(4)), model: r.model } : {}),
     });
+    // F017 웹 푸시: 미션 완료
+    await notifyOrgOwner(this.db, this.mission.orgId, {
+      title: "🏁 미션 완료",
+      body: `${this.mission.title} — ${title}`.slice(0, 120),
+      url: `/missions/${this.mission.id}`,
+      tag: `mission-${this.mission.id}`,
+    });
   }
 
   // ── 사용자 결정 반영 (승인함 F012 → 메시지로 전달) ─────────────────────────────
@@ -665,7 +673,7 @@ class Leader {
   }
 
   private async requestApproval(type: "CHECKPOINT" | "QUESTION", stage: CheckpointStage | undefined, content: string, extra: ApprovalPayload = {}, taskId?: string | null) {
-    await this.db.transaction(async (tx) => {
+    const reqId = await this.db.transaction(async (tx) => {
       const [req] = await tx
         .insert(approvalRequests)
         .values({
@@ -688,9 +696,17 @@ class Leader {
         reasoning: preview(content),
         payload: { type, stage: stage ?? null },
       });
+      return req.id;
     });
     await this.deps.publish(this.mission.orgId, { type: "approval" });
     await this.changed();
+    // F017 웹 푸시: 승인 대기
+    await notifyOrgOwner(this.db, this.mission.orgId, {
+      title: type === "QUESTION" ? `✋ ${this.leader.name}의 질문` : "✋ 승인이 필요합니다",
+      body: content.split("\n")[0].slice(0, 120),
+      url: `/approvals/${reqId}`,
+      tag: `approval-${reqId}`,
+    });
   }
 
   private async changed() {
