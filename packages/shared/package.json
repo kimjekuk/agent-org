@@ -16,6 +16,8 @@
     "./llm/gateway": "./src/llm/gateway.ts",
     "./llm/pricing": "./src/llm/pricing.ts",
     "./llm/provider": "./src/llm/provider.ts",
+    "./llm/models": "./src/llm/models.ts",
+    "./llm/openaiCompatible": "./src/llm/openaiCompatible.ts",
     "./events": "./src/events.ts",
     "./queue": "./src/queue.ts",
     "./agents/templates": "./src/agents/templates.ts",
