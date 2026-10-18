@@ -107,3 +107,25 @@ export async function saveFallbackModel(form: FormData) {
   });
   revalidatePath("/settings");
 }
+
+/** 조직 하루 예산 (원). 이 금액을 쓰면 그날은 AI 호출을 멈춘다 (F013) */
+export async function saveBudgetDaily(form: FormData) {
+  const user = await requireUser();
+  const org = await getCurrentOrg(user.id);
+  if (!org) return;
+  const value = Math.round(Number(form.get("budgetDaily")));
+  if (!Number.isFinite(value) || value < 100 || value > 1_000_000) return;
+  await getDb().transaction(async (tx) => {
+    await tx.update(schema.organizations).set({ budgetDaily: value }).where(eq(schema.organizations.id, org.id));
+    await writeAudit(tx, {
+      orgId: org.id,
+      actorType: "USER",
+      actorId: user.id,
+      action: "org.budget_daily",
+      targetType: "organization",
+      targetId: org.id,
+      reasoning: `하루 예산 ${org.budgetDaily.toLocaleString("ko-KR")}원 → ${value.toLocaleString("ko-KR")}원`,
+    });
+  });
+  revalidatePath("/settings");
+}
