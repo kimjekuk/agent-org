@@ -1,11 +1,10 @@
 // Claude(Anthropic) 구현체. @anthropic-ai/sdk는 이 파일에서만 import한다 (guards.test가 검사).
 import Anthropic from "@anthropic-ai/sdk";
+import { supportsWebSearch } from "./pricing";
 import type { LLMProvider, LLMRequest, LLMResult, LLMUsageIteration } from "./provider";
 
 // 서버측 대체 모델(fallbacks: "default")을 지원하는 모델. Haiku 5.5는 지원하지 않는다.
 const SERVER_FALLBACK_MODELS = new Set(["claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-1"]);
-// web_search_20260209를 지원하는 모델. 그 외(Haiku 등)는 검색 없이 진행한다 (PRD 2장 결정)
-const WEB_SEARCH_MODELS = new Set(["claude-sonnet-5-5", "claude-sonnet-5", "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8"]);
 const MAX_PAUSE_RESUMES = 5; // 서버 도구 루프가 pause_turn으로 멈추면 이어서 실행하는 최대 횟수
 
 export const anthropicProvider: LLMProvider = {
@@ -14,7 +13,7 @@ export const anthropicProvider: LLMProvider = {
   async complete(apiKey: string, req: LLMRequest): Promise<LLMResult> {
     const client = new Anthropic({ apiKey });
     const fallback = SERVER_FALLBACK_MODELS.has(req.model);
-    const webSearch = Boolean(req.webSearchMaxUses) && WEB_SEARCH_MODELS.has(req.model);
+    const webSearch = Boolean(req.webSearchMaxUses) && supportsWebSearch(req.model);
 
     const messages: Anthropic.Beta.BetaMessageParam[] = req.messages.map((m) => ({ role: m.role, content: m.content }));
     const usage: LLMUsageIteration[] = [];

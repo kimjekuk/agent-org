@@ -7,7 +7,7 @@ import type { AnyDb } from "@agentorg/shared/db";
 import { agents, artifacts, messages, missions, organizations, tasks } from "@agentorg/shared/db/schema";
 import { publishOrgEvent } from "@agentorg/shared/events";
 import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError, MissionCallLimitError } from "@agentorg/shared/llm/gateway";
-import { DEFAULT_MODELS, isBuiltinModel } from "@agentorg/shared/llm/pricing";
+import { DEFAULT_MODELS, supportsWebSearch } from "@agentorg/shared/llm/pricing";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
 import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
 import { extractSection, MEMO_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
@@ -248,7 +248,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
 
 function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string): string {
   // 웹 검색은 Claude 모델만 (2026-10-18 결정). 다른 회사 모델이면 권한이 있어도 검색 없이 진행한다
-  const canSearch = perms.web_search && isBuiltinModel(agent.modelPrimary ?? DEFAULT_MODELS.primary);
+  const canSearch = perms.web_search && supportsWebSearch(agent.modelPrimary ?? DEFAULT_MODELS.primary);
   const skills = (agent.skills ?? []) as string[];
   const rules = [
     "지시를 처리해 결과물을 한국어 마크다운으로 작성한다. 첫 줄은 '# 제목'으로 시작한다.",

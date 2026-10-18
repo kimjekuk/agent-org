@@ -57,7 +57,7 @@ export const organizations = pgTable("organizations", {
   emergencyStop: boolean("emergency_stop").notNull().default(false),
   autonomyDefault: autonomy("autonomy_default").notNull().default("CHECKPOINT"),
   budgetMonthly: integer("budget_monthly"),
-  budgetDaily: integer("budget_daily").notNull().default(20000), // PRD 11장 초기값
+  budgetDaily: integer("budget_daily").notNull().default(2000), // 2026-10-18 결정: Max 5x 월 API 크레딧 안 (PRD 11장 초기값 20,000원에서 변경)
   workHours: jsonb("work_hours"),
   fallbackModel: text("fallback_model"), // F109 API 장애 시 대체 모델 (없으면 대체 없이 실패 처리)
   createdAt: createdAt(),

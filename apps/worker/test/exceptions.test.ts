@@ -175,7 +175,7 @@ describe("미션", () => {
   });
 
   it("리더 실패 질문을 거절하면 일시정지 (자동 재개가 다시 시작하지 않게)", async () => {
-    failing["claude-sonnet-5-5"] = new Error("계획(JSON)을 읽지 못했습니다");
+    failing["claude-haiku-5-5"] = new Error("계획(JSON)을 읽지 못했습니다"); // 리더 기본 모델
     const mission = await startMission();
     await drain();
     const [ap] = await approvals(mission.id);

@@ -2,9 +2,17 @@
 import type { LLMUsageIteration } from "./provider";
 
 export const DEFAULT_MODELS = {
-  primary: "claude-sonnet-5-5", // 일반용 (2026-10-17 결정)
+  primary: "claude-haiku-5-5", // 일반용 (2026-10-18 결정: Max 5x 월 API 크레딧 안에서 쓰도록 Haiku)
   economy: "claude-haiku-5-5", // 절약용: 예산 80% 이상에서 자동 전환
+  search: "claude-sonnet-5-5", // 웹 검색 권한이 있는 에이전트 (Haiku는 웹 검색을 못 함)
 } as const;
+
+// web_search_20260209를 지원하는 모델. 그 외(Haiku 등)는 검색 없이 진행한다 (PRD 2장 결정)
+const WEB_SEARCH_MODELS = new Set(["claude-sonnet-5-5", "claude-sonnet-5", "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8"]);
+
+export function supportsWebSearch(model: string): boolean {
+  return WEB_SEARCH_MODELS.has(model);
+}
 
 /** 에이전트 프로필에서 고를 수 있는 모델 (요금: 입력/출력 100만 토큰당) */
 export const MODEL_CHOICES = [
