@@ -18,6 +18,7 @@ import {
   missionKind,
   needsCheckpoint,
 } from "@agentorg/shared/missions";
+import { addArtifactToKnowledge, knowledgeContext } from "@agentorg/shared/knowledge";
 import { clearMemoriesBySource, extractSection, LESSON_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
 import { notifyOrgOwner } from "@agentorg/shared/push";
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
@@ -135,7 +136,9 @@ class Leader {
     ]
       .filter(Boolean)
       .join("\n\n");
-    const r = await this.ask("미션 계획 (Task 분해·배정)", prompt, 4000);
+    // F105: 비슷한 일을 한 적이 있으면 계획에 참고
+    const knowledge = await knowledgeContext(this.db, this.mission.orgId, [this.mission.title, this.mission.topic, this.mission.goal ?? ""].join(" "), this.mission.id);
+    const r = await this.ask("미션 계획 (Task 분해·배정)", prompt, 4000, knowledge);
     const parsed = parseJsonObject<PlanJson>(r.text);
     const items = (parsed?.tasks ?? []).filter((t) => t?.title?.trim()).slice(0, 8);
     if (items.length === 0) throw new Error("계획(JSON)을 읽지 못했습니다");
@@ -435,6 +438,11 @@ class Leader {
       artifactId,
       ...(r ? { costKrw: Number(r.costKrw.toFixed(4)), model: r.model } : {}),
     });
+    // F105: 미션 최종 결과는 조직 지식 베이스에 넣는다
+    if (artifactId) {
+      const [art] = await this.db.select().from(artifacts).where(eq(artifacts.id, artifactId));
+      if (art) await addArtifactToKnowledge(this.db, art, { type: "AGENT", id: this.leader.id }, "미션 완료 최종 결과");
+    }
     // F017 웹 푸시: 미션 완료
     await notifyOrgOwner(this.db, this.mission.orgId, {
       title: "🏁 미션 완료",
@@ -611,7 +619,7 @@ class Leader {
 
   // ── 도움 함수 ─────────────────────────────────────────────
 
-  private async ask(purpose: string, prompt: string, maxTokens: number) {
+  private async ask(purpose: string, prompt: string, maxTokens: number, knowledge?: string) {
     const perms = (this.leader.toolPermissions ?? {}) as ToolPermissions;
     const skills = (this.leader.skills ?? []) as string[];
     const memory = await memoryContext(this.db, this.leader.id, this.mission.id); // F101
@@ -638,6 +646,7 @@ class Leader {
             .filter(Boolean)
             .join("\n"),
           memory,
+          knowledge,
         }),
         messages: [{ role: "user", content: prompt }],
         maxTokens,
