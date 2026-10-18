@@ -6,10 +6,10 @@ import { type AnyDb, getDb, schema } from "@agentorg/shared/db";
 import { publishOrgEvent } from "@agentorg/shared/events";
 import { AUTONOMY_LABEL, type Autonomy, type MissionMessagePayload, OUTPUT_FORMATS } from "@agentorg/shared/missions";
 import { agentsWithPendingDirectives, enqueueAgentRun } from "@agentorg/shared/queue";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { pickLeader, startMission } from "@agentorg/shared/schedule";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getOrgAgent } from "@/lib/agents";
 import { getOrgMission } from "@/lib/missions";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
@@ -76,50 +76,26 @@ export async function createMission(_prev: FormState, form: FormData): Promise<F
 
   // 담당: 고르지 않으면 리더 자동 지정
   const db = getDb();
-  const leaderRaw = String(form.get("leaderId") ?? "");
-  let leader = leaderRaw ? await getOrgAgent(org.id, leaderRaw) : null;
-  if (!leader) {
-    const [auto] = await db
-      .select()
-      .from(schema.agents)
-      .where(and(eq(schema.agents.orgId, org.id), eq(schema.agents.rank, "LEADER"), eq(schema.agents.isActive, true)))
-      .orderBy(asc(schema.agents.createdAt))
-      .limit(1);
-    leader = auto ?? null;
-  }
-  if (!leader || !leader.isActive) return { error: "미션을 맡을 리더가 없습니다. 에이전트 화면에서 리더를 채용해 주세요" };
+  const leader = await pickLeader(db, org.id, String(form.get("leaderId") ?? "") || null);
+  if (!leader) return { error: "미션을 맡을 리더가 없습니다. 에이전트 화면에서 리더를 채용해 주세요" };
 
-  const mission = await db.transaction(async (tx) => {
-    const [m] = await tx
-      .insert(schema.missions)
-      .values({
-        orgId: org.id,
-        title: topic.slice(0, 80),
-        topic,
-        goal,
-        successCriteria,
-        deadline,
-        budgetLimit,
-        priority: [0, 1, 2].includes(priority) ? priority : 0,
-        outputFormat,
-        autonomy,
-        referenceNotes,
-        leaderId: leader.id,
-        status: "RUNNING",
-      })
-      .returning();
-    await writeAudit(tx, {
+  const mission = await db.transaction((tx) =>
+    startMission(tx, {
       orgId: org.id,
-      actorType: "USER",
-      actorId: user.id,
-      action: "mission.create",
-      targetType: "mission",
-      targetId: m.id,
-      reasoning: `미션 "${m.title}" 생성 → 리더 ${leader.name} (${AUTONOMY_LABEL[autonomy]}, 예산 ${budgetLimit}원)`,
-    });
-    await messageLeader(tx, org.id, user.id, m.id, leader.id, "MISSION_START", `새 미션: ${topic}\n계획을 세워 주세요.`);
-    return m;
-  });
+      leaderId: leader.id,
+      leaderName: leader.name,
+      actor: { type: "USER", id: user.id },
+      topic,
+      goal,
+      successCriteria,
+      deadline,
+      budgetLimit,
+      priority,
+      outputFormat,
+      autonomy,
+      referenceNotes,
+    }),
+  );
   await enqueueAgentRun({ orgId: org.id, agentId: leader.id });
   await publishOrgEvent(org.id, { type: "mission", missionId: mission.id });
   redirect(`/missions/${mission.id}`);
