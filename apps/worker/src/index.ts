@@ -1,6 +1,7 @@
 import { AGENT_QUEUE, APP_NAME } from "@agentorg/shared";
 import { getDb } from "@agentorg/shared/db";
 import { agentsWithPendingDirectives, type RunAgentJob } from "@agentorg/shared/queue";
+import { runDueSchedules } from "@agentorg/shared/schedule";
 import { Queue, Worker } from "bullmq";
 import { runAgent } from "./loops/member";
 
@@ -33,6 +34,19 @@ async function sweep() {
 }
 const sweepTimer = setInterval(() => void sweep(), SWEEP_INTERVAL_MS);
 
+// F106 스케줄: 1분마다 실행 시각이 된 반복 미션·예약 지시를 실행한다
+const SCHEDULE_INTERVAL_MS = 60 * 1000;
+async function tickSchedules() {
+  try {
+    const jobs = await runDueSchedules(getDb());
+    for (const job of jobs) await queue.add("run-agent", job);
+    if (jobs.length) console.log(`[worker] 예약 실행: ${jobs.length}건`);
+  } catch (e) {
+    console.error(`[worker] 예약 실행 실패: ${(e as Error).message}`);
+  }
+}
+const scheduleTimer = setInterval(() => void tickSchedules(), SCHEDULE_INTERVAL_MS);
+
 worker.on("ready", () => {
   console.log(`[worker] ${APP_NAME} 워커 준비됨 — 큐 "${AGENT_QUEUE}" 대기 중`);
   void sweep();
@@ -46,6 +60,7 @@ worker.on("error", (err) => {
 async function shutdown(signal: string) {
   console.log(`[worker] ${signal} 수신 — 종료`);
   clearInterval(sweepTimer);
+  clearInterval(scheduleTimer);
   await worker.close();
   await queue.close();
   process.exit(0);

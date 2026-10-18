@@ -22,7 +22,8 @@
     "./queue": "./src/queue.ts",
     "./agents/templates": "./src/agents/templates.ts",
     "./missions": "./src/missions.ts",
-    "./push": "./src/push.ts"
+    "./push": "./src/push.ts",
+    "./schedule": "./src/schedule.ts"
   },
   "scripts": {
     "typecheck": "tsc",

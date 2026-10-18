@@ -4,12 +4,13 @@
 import type { AgentTemplate, ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
-import { agents, artifacts, messages, missions, tasks } from "@agentorg/shared/db/schema";
+import { agents, artifacts, messages, missions, organizations, tasks } from "@agentorg/shared/db/schema";
 import { publishOrgEvent } from "@agentorg/shared/events";
 import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError } from "@agentorg/shared/llm/gateway";
 import { DEFAULT_MODELS, isBuiltinModel } from "@agentorg/shared/llm/pricing";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
 import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
+import { allowedAfterHours, isWithinWorkHours, parseWorkHours } from "@agentorg/shared/schedule";
 import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import { runTurn, type StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
@@ -43,7 +44,7 @@ export async function runAgent(db: AnyDb, job: RunAgentJob, runDeps: RunDeps = {
     const decision = await runTurn(db, { ...job, turn }, async (d) => {
       // 사용자 메시지가 있으면 그것부터 (guards가 골라 준다). 일시정지·취소된 미션의 메시지는 건너뛴다
       const userMsg = d.action === "USER_MESSAGES" ? await firstActive(db, d.messages) : undefined;
-      const msg = userMsg ?? (await nextAgentWork(db, job.agentId));
+      const msg = userMsg ?? (await nextAgentWork(db, job));
       if (!msg) {
         idle = true;
         return;
@@ -67,22 +68,26 @@ const INACTIVE_MISSION = ["PAUSED", "CANCELLED"] as const;
  * 다른 에이전트가 보낸 미처리 일 — 지시, 또는 (리더라면) 검토할 Task 보고.
  * 우선순위 높은 것, 오래된 것부터. 일시정지·취소된 미션은 제외.
  */
-async function nextAgentWork(db: AnyDb, agentId: string): Promise<Message | undefined> {
-  const [row] = await db
-    .select({ msg: messages })
+async function nextAgentWork(db: AnyDb, job: RunAgentJob): Promise<Message | undefined> {
+  // F106 근무 시간 밖이면 예약으로 생긴 일·에이전트끼리의 일은 다음 근무 시작까지 둔다 (사용자 직접 지시·미션은 처리)
+  const [org] = await db.select({ workHours: organizations.workHours }).from(organizations).where(eq(organizations.id, job.orgId));
+  const afterHours = !isWithinWorkHours(parseWorkHours(org?.workHours), new Date());
+  const rows = await db
+    .select({ msg: messages, scheduleId: missions.scheduleId, missionId: missions.id })
     .from(messages)
     .leftJoin(missions, eq(missions.id, messages.missionId))
     .where(
       and(
-        eq(messages.receiverAgentId, agentId),
+        eq(messages.receiverAgentId, job.agentId),
         isNull(messages.readAt),
         or(eq(messages.type, "DIRECTIVE"), and(eq(messages.type, "REPORT"), isNotNull(messages.taskId))),
         or(isNull(missions.id), notInArray(missions.status, [...INACTIVE_MISSION])),
       ),
     )
     .orderBy(desc(messages.priority), asc(messages.createdAt))
-    .limit(1);
-  return row?.msg;
+    .limit(afterHours ? 50 : 1);
+  if (!afterHours) return rows[0]?.msg;
+  return rows.find((r) => allowedAfterHours(r.msg, r.missionId ? { scheduleId: r.scheduleId } : null))?.msg;
 }
 
 async function firstActive(db: AnyDb, list: Message[]): Promise<Message | undefined> {

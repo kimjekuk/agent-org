@@ -98,6 +98,7 @@ export const missions = pgTable("missions", {
   referenceNotes: text("reference_notes"), // 참고 자료 URL·텍스트 (파일 업로드는 이후 단계)
   autonomy: autonomy("autonomy"),
   leaderId: uuid("leader_id").references(() => agents.id, { onDelete: "set null" }),
+  scheduleId: uuid("schedule_id").references((): AnyPgColumn => schedules.id, { onDelete: "set null" }), // F106 반복·예약으로 만든 미션
   status: missionStatus("status").notNull().default("DRAFT"),
   createdAt: createdAt(),
 });
@@ -230,4 +231,30 @@ export const llmModels = pgTable("llm_models", {
   enabled: boolean("enabled").notNull().default(false),
   createdAt: createdAt(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// F106 스케줄: 반복 미션·예약 지시. 시간은 한국 시간(KST) 기준
+export const scheduleKind = pgEnum("schedule_kind", ["MISSION", "DIRECTIVE"]);
+export const scheduleRepeat = pgEnum("schedule_repeat", ["ONCE", "DAILY", "WEEKLY", "MONTHLY"]);
+
+export const schedules = pgTable("schedules", {
+  id: id(),
+  orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  kind: scheduleKind("kind").notNull(),
+  title: text("title").notNull(),
+  /** MISSION: 미션 내용(주제·목표·성공 기준·형식·예산·자율성…) / DIRECTIVE: { content } */
+  spec: jsonb("spec").notNull(),
+  /** DIRECTIVE 받는 에이전트, MISSION 담당 리더(없으면 자동) */
+  agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  repeat: scheduleRepeat("repeat").notNull(),
+  time: text("time").notNull(), // "HH:MM" (KST)
+  weekdays: jsonb("weekdays").$type<number[]>().notNull().default([]), // WEEKLY: 0=일 … 6=토
+  dayOfMonth: integer("day_of_month"), // MONTHLY: 1~28
+  runDate: text("run_date"), // ONCE: "YYYY-MM-DD" (KST)
+  nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+  lastMissionId: uuid("last_mission_id"),
+  lastResult: text("last_result"), // 마지막 실행 결과 한 줄 (실행·건너뜀 이유)
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: createdAt(),
 });
