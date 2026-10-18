@@ -38,6 +38,10 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
+      # 아래 두 값은 deploy.sh가 .env에 자동 생성한다
+      AUTH_SECRET: ${AUTH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      AUTH_TRUST_HOST: "true" # Tailscale serve(HTTPS 프록시) 뒤에서 동작
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,6 +61,7 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY} # gateway가 API 키를 복호화할 때 사용
     depends_on:
       postgres:
         condition: service_healthy

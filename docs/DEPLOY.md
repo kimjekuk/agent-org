@@ -56,6 +56,9 @@ git clone -b dev git@github-agentorg:kimjekuk/agent-org.git /opt/agentorg/dev
 ```bash
 printf 'POSTGRES_DB=agentorg_dev\nPOSTGRES_USER=agentorg\nPOSTGRES_PASSWORD=%s\n' "$(openssl rand -hex 24)" > /opt/agentorg/dev/.env && chmod 600 /opt/agentorg/dev/.env
 ```
+> `AUTH_SECRET`(로그인), `ENCRYPTION_KEY`(API 키 암호화)는 배포 때 `deploy.sh`가 `.env`에 **자동으로 추가**한다 (1-A~).
+> **`.env`를 지우거나 `ENCRYPTION_KEY`를 바꾸면 저장된 API 키를 다시 읽을 수 없다.** 백업할 때 `.env`도 함께 보관한다.
+
 첫 배포 (이미지 빌드로 5~10분 걸림):
 ```bash
 FORCE=1 /opt/agentorg/dev/deploy/deploy.sh dev
@@ -79,7 +82,8 @@ sudo tailscale serve --bg --https=10000 http://127.0.0.1:3200
 sudo tailscale serve status; systemctl list-timers 'agentorg-*' --no-pager; systemctl is-active jstudio
 ```
 → JStudio 줄(`/ proxy http://127.0.0.1:8000`)과 `:10000` 줄이 **둘 다** 보이고, 타이머가 있고, 마지막 줄이 `active`면 성공.
-→ 휴대폰(Tailscale 연결 상태) 브라우저에서 `https://<서버>.ts.net:10000` 열면 "AgentOrg" 빈 페이지.
+→ 휴대폰(Tailscale 연결 상태) 브라우저에서 `https://<서버>.ts.net:10000` 열면 "AgentOrg" 화면.
+→ 1-A부터: 처음 열면 **관리자 계정 만들기(`/setup`)** 화면이 나온다. 계정은 휴대폰에서 직접 만든다 (서버 명령 불필요).
 
 ---
 

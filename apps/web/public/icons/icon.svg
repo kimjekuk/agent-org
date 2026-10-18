@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C3AED"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- 뒤의 두 동료 -->
+  <circle cx="150" cy="292" r="62" fill="#7DD3FC"/>
+  <circle cx="150" cy="304" r="40" fill="#FFF1E6"/>
+  <circle cx="137" cy="300" r="5" fill="#3F3A36"/><circle cx="163" cy="300" r="5" fill="#3F3A36"/>
+  <circle cx="362" cy="292" r="62" fill="#86EFAC"/>
+  <circle cx="362" cy="304" r="40" fill="#FFF1E6"/>
+  <circle cx="349" cy="300" r="5" fill="#3F3A36"/><circle cx="375" cy="300" r="5" fill="#3F3A36"/>
+  <!-- 가운데 리더 -->
+  <circle cx="256" cy="246" r="104" fill="#FCD34D"/>
+  <circle cx="256" cy="266" r="68" fill="#FFF1E6"/>
+  <path d="M188 262 Q186 192 256 190 Q326 192 324 262 L314 230 Q256 214 198 230 Z" fill="#3F3A36"/>
+  <circle cx="234" cy="262" r="8" fill="#3F3A36"/><circle cx="278" cy="262" r="8" fill="#3F3A36"/>
+  <path d="M236 292 Q256 310 276 292" stroke="#3F3A36" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <!-- 책상 -->
+  <rect x="96" y="360" width="320" height="34" rx="17" fill="#FFFFFF" opacity="0.92"/>
+</svg>

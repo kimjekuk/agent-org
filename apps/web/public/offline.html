@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>연결 끊김 — AgentOrg</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; background: #0a0a0a; color: #ededed; padding: 16px; box-sizing: border-box; }
+  @media (prefers-color-scheme: light) { body { background: #fff; color: #171717; } }
+  main { max-width: 320px; text-align: center; }
+  img { width: 96px; height: 96px; border-radius: 24px; }
+  button { margin-top: 16px; height: 44px; padding: 0 20px; border-radius: 10px; border: 0; font-size: 15px; font-weight: 700; background: #2563eb; color: #fff; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icons/icon-192.png" alt="">
+  <h1>연결이 끊겼습니다</h1>
+  <p>서버에 닿지 않습니다. 와이파이·데이터와 Tailscale 연결을 확인한 뒤 다시 시도해 주세요. 에이전트는 서버에서 계속 일하고 있습니다.</p>
+  <button onclick="location.reload()">다시 시도</button>
+</main>
+</body>
+</html>
