@@ -1,0 +1,72 @@
+"use server";
+
+// F011 산출물: 평가(1~5) · 이전 버전으로 되돌리기(새 버전으로 복사). 변경은 AuditLog에 기록
+import { writeAudit } from "@agentorg/shared/audit";
+import { getDb, schema } from "@agentorg/shared/db";
+import { and, eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { artifactVersions } from "@/lib/artifacts";
+import { getCurrentOrg } from "@/lib/org";
+import { requireUser } from "@/lib/session";
+
+async function context(form: FormData) {
+  const user = await requireUser();
+  const org = await getCurrentOrg(user.id);
+  if (!org) redirect("/settings");
+  const id = String(form.get("id"));
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { user, org, art: undefined };
+  const [art] = await getDb()
+    .select()
+    .from(schema.artifacts)
+    .where(and(eq(schema.artifacts.id, id), eq(schema.artifacts.orgId, org.id)));
+  return { user, org, art };
+}
+
+export async function rateArtifact(form: FormData) {
+  const { user, org, art } = await context(form);
+  const rating = Number(form.get("rating"));
+  if (!art || !Number.isInteger(rating) || rating < 1 || rating > 5) return;
+  await getDb().transaction(async (tx) => {
+    await tx.update(schema.artifacts).set({ rating }).where(eq(schema.artifacts.id, art.id));
+    await writeAudit(tx, { orgId: org.id, actorType: "USER", actorId: user.id, action: "artifact.rate", targetType: "artifact", targetId: art.id, reasoning: `"${art.title}" v${art.version} 평가 ${rating}점` });
+  });
+  revalidatePath(`/artifacts/${art.id}`);
+  revalidatePath("/artifacts");
+}
+
+/** 고른 버전의 내용을 새 버전(최신+1)으로 저장한다 — 기록은 지우지 않는다 */
+export async function revertArtifact(form: FormData) {
+  const { user, org, art } = await context(form);
+  if (!art) return;
+  const versions = await artifactVersions(org.id, art);
+  const latest = versions[0];
+  if (!latest || latest.id === art.id) return;
+  const copy = await getDb().transaction(async (tx) => {
+    const [c] = await tx
+      .insert(schema.artifacts)
+      .values({
+        orgId: org.id,
+        missionId: art.missionId,
+        taskId: art.taskId,
+        agentId: art.agentId,
+        title: art.title,
+        format: art.format,
+        content: art.content,
+        version: latest.version + 1,
+        parentVersionId: latest.id,
+      })
+      .returning({ id: schema.artifacts.id });
+    await writeAudit(tx, {
+      orgId: org.id,
+      actorType: "USER",
+      actorId: user.id,
+      action: "artifact.revert",
+      targetType: "artifact",
+      targetId: c.id,
+      reasoning: `"${art.title}"을(를) v${art.version} 내용으로 되돌림 (새 버전 v${latest.version + 1})`,
+    });
+    return c;
+  });
+  redirect(`/artifacts/${copy.id}`);
+}
