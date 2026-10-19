@@ -14,7 +14,7 @@ import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
 import { awardXp, XP } from "@agentorg/shared/growth";
 import { knowledgeContext } from "@agentorg/shared/knowledge";
 import { extractSection, MEMO_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
-import { missionKind } from "@agentorg/shared/missions";
+import { missionKind, SELF_CHECK_HEADING } from "@agentorg/shared/missions";
 import { allowedAfterHours, isWithinWorkHours, parseWorkHours } from "@agentorg/shared/schedule";
 import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import { runTurn, type StopReason } from "../guards";
@@ -22,6 +22,7 @@ import { buildSystemPrompt } from "../prompts/system";
 import { type Agent, type Deps, type Enqueue, type Message, type Publish, preview, setStatus, titleOf } from "./common";
 import { handleLeaderMessage, isLeaderWork } from "./leader";
 import { handleMeetingTurn } from "./meeting";
+import { handleQaReview } from "./qa";
 
 export interface RunDeps {
   provider?: LLMProvider; // 테스트에서 가짜 제공사 주입
@@ -111,6 +112,7 @@ async function handleMessage(db: AnyDb, job: RunAgentJob, msg: Message, deps: De
   if (msg.missionId) {
     const [mission] = await db.select().from(missions).where(eq(missions.id, msg.missionId));
     if (mission && missionKind(msg.payload) === "MEETING") return handleMeetingTurn(db, agent, mission, msg, deps);
+    if (mission && missionKind(msg.payload) === "QA_REVIEW") return handleQaReview(db, agent, mission, msg, deps);
     if (mission && isLeaderWork(mission, agent, msg)) return handleLeaderMessage(db, agent, mission, msg, deps);
   }
   return handleDirective(db, job, agent, msg, deps);
@@ -143,7 +145,8 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
 
     // F101: 결과 끝의 '## 기억할 점'은 떼어 기억으로 저장한다 (산출물·보고에는 남기지 않음)
     const { body, items: memo } = extractSection(r.text.trim(), MEMO_HEADING);
-    const text = body;
+    // F107: 미션 Task 결과 끝의 '## 자기검토'도 떼어 보고에 싣는다 (검토자가 함께 본다)
+    const { body: text, items: selfCheck } = msg.taskId ? extractSection(body, SELF_CHECK_HEADING, 12) : { body, items: [] as string[] };
     await db.transaction(async (tx) => {
       let artifactId: string | null = null;
       let title: string | null = null;
@@ -188,9 +191,10 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
           senderAgentId: agent.id,
           receiverAgentId: msg.senderType === "AGENT" ? msg.senderAgentId : null, // 사용자 지시면 사용자에게 보고
           type: "REPORT",
-          content: artifactId ? `"${title}" 결과물을 만들었습니다.` : text || "(빈 응답)",
+          content: `${artifactId ? `"${title}" 결과물을 만들었습니다.` : text || "(빈 응답)"}${selfCheck.length ? `\n\n자기검토\n${selfCheck.map((c) => `- ${c}`).join("\n")}` : ""}`,
           payload: {
             directiveId: msg.id,
+            ...(selfCheck.length ? { selfCheck } : {}),
             artifactId,
             model: r.model,
             costKrw: Number(r.costKrw.toFixed(4)),

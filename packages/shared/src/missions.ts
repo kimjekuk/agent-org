@@ -38,21 +38,32 @@ export const CALL_LIMIT_STEP = 60;
  * - RESUME: 시스템이 리더에게 — 멈춘 미션을 마지막으로 끝난 단계 다음부터 이어서 (F109)
  * - MEETING: 리더·앞 참여자가 다음 참여자에게 — 회의에서 의견 말하기 (F104)
  * - MEETING_WRAP: 마지막 참여자·사용자 답글이 리더에게 — 회의 결론 정리 (F104)
+ * - QA_REVIEW: 리더가 QA 담당에게 — Task 결과 검토 (F107)
+ * - QA_RESULT: QA 담당이 리더에게 — 검토 결과 (통과·반려)를 반영 (F107)
  */
-export type MissionMessageKind = "MISSION_START" | "APPROVAL" | "NOTE" | "TASK_MOVED" | "FINALIZE" | "TASK" | "RESUME" | "MEETING" | "MEETING_WRAP";
+export type MissionMessageKind = "MISSION_START" | "APPROVAL" | "NOTE" | "TASK_MOVED" | "FINALIZE" | "TASK" | "RESUME" | "MEETING" | "MEETING_WRAP" | "QA_REVIEW" | "QA_RESULT";
 
 export interface MissionMessagePayload {
   kind: MissionMessageKind;
   approvalId?: string;
   /** MEETING · MEETING_WRAP: 어느 회의인지 */
   meetingId?: string;
+  /** QA_RESULT: QA 검토 결과. qaFailed면 QA가 검토하지 못해 리더가 직접 검토한다 */
+  pass?: boolean;
+  feedback?: string;
+  qaFailed?: boolean;
+  costKrw?: number;
+  model?: string;
 }
+
+/** F107 자기검토: 팀원이 Task 결과 끝에 두는 점검표 제목 (떼어서 보고에 싣고 검토자에게 전달) */
+export const SELF_CHECK_HEADING = "자기검토";
 
 export interface ApprovalPayload {
   stage?: CheckpointStage;
   artifactId?: string | null;
-  /** QUESTION: TASK_FAILED(Task 실패 반복) | LEADER_FAILED(리더 처리 실패) | CALL_LIMIT(미션 AI 호출 상한 도달) */
-  reason?: "TASK_FAILED" | "LEADER_FAILED" | "CALL_LIMIT";
+  /** QUESTION: TASK_FAILED(Task 실패 반복) | LEADER_FAILED(리더 처리 실패) | CALL_LIMIT(미션 AI 호출 상한 도달) | REJECT_LIMIT(반려 한도에도 검토 미통과, F107) */
+  reason?: "TASK_FAILED" | "LEADER_FAILED" | "CALL_LIMIT" | "REJECT_LIMIT";
   /** LEADER_FAILED: 승인하면 다시 처리할 메시지 */
   retryMessageId?: string;
 }
