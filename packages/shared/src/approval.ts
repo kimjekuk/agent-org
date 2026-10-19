@@ -2,8 +2,10 @@
 import { and, eq } from "drizzle-orm";
 import type { AnyDb } from "./db/client";
 import { writeAudit } from "./audit";
-import { agents, approvalRequests, messages, missions } from "./db/schema";
+import { agents, approvalRequests, messages, missions, organizations } from "./db/schema";
 import type { MissionMessagePayload } from "./missions";
+import { PROPOSAL_KIND, type ProposalPayload } from "./proposals";
+import { pickLeader, startMission } from "./schedule";
 
 export class ApprovalRequiredError extends Error {
   constructor(message = "사용자 승인이 필요합니다") {
@@ -49,6 +51,14 @@ export async function decideApproval(db: AnyDb, input: DecideInput): Promise<{ e
   if (req.status === "APPROVED" || req.status === "REJECTED") return { error: "이미 처리한 요청입니다" };
   const comment = input.comment?.trim().slice(0, 2000) || null;
   const label = { APPROVED: "승인", REJECTED: "거절", HELD: "보류" }[input.decision];
+  const proposal = (req.payload as ProposalPayload | null)?.kind === PROPOSAL_KIND ? (req.payload as ProposalPayload) : null;
+  // F108 역제안 승인 = 미션 시작. 맡을 리더가 없으면 결정 전에 알린다
+  let proposalLeader: Awaited<ReturnType<typeof pickLeader>> | null = null;
+  if (proposal && input.decision === "APPROVED") {
+    const [proposer] = req.agentId ? await db.select({ id: agents.id, rank: agents.rank }).from(agents).where(eq(agents.id, req.agentId)) : [];
+    proposalLeader = await pickLeader(db, input.orgId, proposer?.rank === "LEADER" ? proposer.id : null);
+    if (!proposalLeader) return { error: "미션을 맡을 리더가 없습니다. 에이전트 화면에서 리더를 채용한 뒤 승인해 주세요" };
+  }
 
   return db.transaction(async (tx) => {
     await tx
@@ -95,6 +105,27 @@ export async function decideApproval(db: AnyDb, input: DecideInput): Promise<{ e
         reasoning: `승인 결정(${label})을 리더에게 전달`,
       });
       return { notify: { orgId: input.orgId, agentId: mission.leaderId } };
+    }
+    // F108 역제안: 승인하면 제안 내용으로 미션을 시작한다 (자율성은 조직 기본값, 예산 기본값)
+    if (proposal) {
+      if (input.decision !== "APPROVED" || !proposalLeader) return { notify: null };
+      const [org] = await tx.select({ autonomyDefault: organizations.autonomyDefault }).from(organizations).where(eq(organizations.id, input.orgId));
+      const notes = [proposal.reason ? `제안 이유: ${proposal.reason}` : "", comment ? `사용자 의견 (최우선): ${comment}` : ""].filter(Boolean).join("\n");
+      const mission = await startMission(tx, {
+        orgId: input.orgId,
+        leaderId: proposalLeader.id,
+        leaderName: proposalLeader.name,
+        actor: { type: "USER", id: input.userId },
+        topic: proposal.topic,
+        goal: proposal.goal ?? null,
+        autonomy: org?.autonomyDefault ?? "CHECKPOINT",
+        referenceNotes: notes || null,
+      });
+      await tx
+        .update(approvalRequests)
+        .set({ payload: { ...proposal, missionId: mission.id } })
+        .where(eq(approvalRequests.id, req.id));
+      return { notify: { orgId: input.orgId, agentId: proposalLeader.id } };
     }
     // F102 승진 제안: 승인하면 직급을 바꾼다
     const kind = (req.payload as { kind?: string; toRank?: string } | null)?.kind;

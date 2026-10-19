@@ -14,6 +14,7 @@ import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
 import { awardXp, XP } from "@agentorg/shared/growth";
 import { knowledgeContext } from "@agentorg/shared/knowledge";
 import { extractSection, MEMO_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
+import { PROPOSAL_GUIDE, PROPOSAL_HEADING, parseProposal, submitProposal } from "@agentorg/shared/proposals";
 import { missionKind, SELF_CHECK_HEADING } from "@agentorg/shared/missions";
 import { allowedAfterHours, isWithinWorkHours, parseWorkHours } from "@agentorg/shared/schedule";
 import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
@@ -136,7 +137,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
         purpose: `지시 처리: ${preview(msg.content)}`,
         model: agent.modelPrimary ?? DEFAULT_MODELS.primary,
         economyModel: agent.modelEconomy ?? DEFAULT_MODELS.economy,
-        system: systemPromptFor(agent, perms, await memoryContext(db, agent.id, msg.missionId), await knowledgeContext(db, job.orgId, msg.content.slice(0, 1000), msg.missionId)),
+        system: systemPromptFor(agent, perms, await memoryContext(db, agent.id, msg.missionId), await knowledgeContext(db, job.orgId, msg.content.slice(0, 1000), msg.missionId), !msg.missionId),
         messages: [{ role: "user", content: msg.content }],
         webSearchMaxUses: perms.web_search ? WEB_SEARCH_MAX_USES : undefined,
       },
@@ -144,7 +145,10 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
     );
 
     // F101: 결과 끝의 '## 기억할 점'은 떼어 기억으로 저장한다 (산출물·보고에는 남기지 않음)
-    const { body, items: memo } = extractSection(r.text.trim(), MEMO_HEADING);
+    const { body: withProposal, items: memo } = extractSection(r.text.trim(), MEMO_HEADING);
+    // F108: 직접 지시 결과 끝의 '## 다음 제안'은 떼어 승인함에 올린다 (미션 Task는 리더가 최종 결과에서)
+    const { body, items: proposalItems } = msg.missionId ? { body: withProposal, items: [] as string[] } : extractSection(withProposal, PROPOSAL_HEADING);
+    const proposal = parseProposal(proposalItems);
     // F107: 미션 Task 결과 끝의 '## 자기검토'도 떼어 보고에 싣는다 (검토자가 함께 본다)
     const { body: text, items: selfCheck } = msg.taskId ? extractSection(body, SELF_CHECK_HEADING, 12) : { body, items: [] as string[] };
     await db.transaction(async (tx) => {
@@ -226,6 +230,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
     });
     await publish(job.orgId, { type: "message", agentId: agent.id });
     await awardXp(db, { agentId: agent.id, amount: XP.WORK_DONE, reason: `지시 처리: ${preview(msg.content)}` }); // F102
+    if (proposal) await submitProposal(db, { orgId: job.orgId, agentId: agent.id, proposal, sourceMessageId: msg.id });
     await notifySender(job, msg, deps);
     await setStatus(db, agent, "IDLE", "지시 처리 완료", publish);
     return undefined;
@@ -257,7 +262,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
   }
 }
 
-function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, knowledge: string): string {
+function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, knowledge: string, direct: boolean): string {
   // 웹 검색은 Claude 모델만 (2026-10-18 결정). 다른 회사 모델이면 권한이 있어도 검색 없이 진행한다
   const canSearch = perms.web_search && supportsWebSearch(agent.modelPrimary ?? DEFAULT_MODELS.primary);
   const skills = (agent.skills ?? []) as string[];
@@ -269,7 +274,8 @@ function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, k
       ? "필요하면 웹 검색으로 최신 정보를 확인한다."
       : "웹 검색 권한이 없다. 알고 있는 지식으로만 작성하고, 최신 정보가 필요하면 그렇다고 밝힌다.",
     `맨 끝에 '## ${MEMO_HEADING}'을 두고, 다음에 비슷한 일을 할 때 도움이 될 점을 1~3줄로 적는다 (없으면 '없음').`,
-  ];
+    direct ? `그다음 ${PROPOSAL_GUIDE}` : "",
+  ].filter(Boolean);
   return buildSystemPrompt({
     name: agent.name,
     role: `${RANK_LABEL[agent.rank]}${skills.length ? ` (${skills.join(", ")})` : ""}`,

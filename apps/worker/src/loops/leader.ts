@@ -24,6 +24,7 @@ import { awardXp, masteredSkills, matchingSkills, XP } from "@agentorg/shared/gr
 import { addArtifactToKnowledge, knowledgeContext } from "@agentorg/shared/knowledge";
 import { MEETING_LABEL, type MeetingKind, RETRO_LESSON_HEADING } from "@agentorg/shared/meetings";
 import { clearMemoriesBySource, extractSection, LESSON_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
+import { type MissionProposal, PROPOSAL_GUIDE, PROPOSAL_HEADING, parseProposal, submitProposal } from "@agentorg/shared/proposals";
 import { notifyOrgOwner } from "@agentorg/shared/push";
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { StopReason } from "../guards";
@@ -492,13 +493,17 @@ class Leader {
       `위 결과를 통합해 최종 ${this.mission.outputFormat ?? "보고서"}를 한국어 마크다운으로 작성하라. 첫 줄은 '# 제목'.`,
       "팀원 결과에 있는 출처(URL)는 유지한다. 끝부분에 '## 성공 기준 점검'으로 기준마다 충족 여부를 체크리스트로 적는다.",
       `맨 끝에 '## ${LESSON_HEADING}'을 두고, 이 미션에서 팀이 다음에 기억할 교훈을 1~3줄로 적는다 (없으면 '없음').`,
+      `그다음 ${PROPOSAL_GUIDE}`,
       previous ? `# 이전 최종 결과\n${clip(previous.content, 12000)}\n\n사용자 수정 요청: ${comment}\n위 요청을 반영해 다시 작성하라.` : "",
     ]
       .filter(Boolean)
       .join("\n\n");
     const r = await this.ask(comment ? "최종 결과 수정" : "최종 결과 통합", prompt, 16000);
     // F101: 최종 결과 끝의 '## 팀 교훈'은 떼어 참여자 모두의 장기 기억으로 저장한다
-    const { body, items: lessons } = extractSection(r.text, LESSON_HEADING);
+    const { body: withProposal, items: lessons } = extractSection(r.text, LESSON_HEADING);
+    // F108: '## 다음 제안'도 떼어 미션을 마칠 때 승인함에 올린다
+    const { body, items: proposalItems } = extractSection(withProposal, PROPOSAL_HEADING);
+    const proposal = parseProposal(proposalItems);
     const text = body || "(빈 응답)";
     const participants = [...new Set([this.leader.id, ...list.map((t) => t.assigneeId).filter((x): x is string => Boolean(x))])];
     const lessonSource = `mission:${this.mission.id}:lessons`;
@@ -546,13 +551,13 @@ class Leader {
 
     if (checkpoint) {
       const body = artifactId ? `최종 결과 승인 요청 — "${title}"` : `최종 결과 승인 요청 — "${title}"\n\n${text}`;
-      await this.requestApproval("CHECKPOINT", "FINAL", body, { artifactId });
+      await this.requestApproval("CHECKPOINT", "FINAL", body, { artifactId, proposal });
     } else {
-      await this.complete(artifactId, title, text, r);
+      await this.complete(artifactId, title, text, r, proposal);
     }
   }
 
-  private async complete(artifactId: string | null, title: string, text: string, r?: { costKrw: number; model: string }) {
+  private async complete(artifactId: string | null, title: string, text: string, r?: { costKrw: number; model: string }, proposal?: MissionProposal | null) {
     await this.db.transaction(async (tx) => {
       await tx.update(missions).set({ status: "DONE" }).where(eq(missions.id, this.mission.id));
       await writeAudit(tx, {
@@ -593,6 +598,8 @@ class Leader {
       url: `/missions/${this.mission.id}`,
       tag: `mission-${this.mission.id}`,
     });
+    // F108: 최종 결과에 적은 다음 제안을 승인함에 (미션당 1개)
+    if (proposal) await submitProposal(this.db, { orgId: this.mission.orgId, agentId: this.leader.id, proposal, sourceMissionId: this.mission.id });
     // F104: 끝난 뒤 회고 회의
     await this.startMeeting("RETRO");
   }
@@ -727,7 +734,7 @@ class Leader {
       }
       await markRead(this.db, msg);
       const final = await this.finalArtifact();
-      return this.complete(final?.id ?? null, final?.title ?? this.mission.title, final?.content ?? ap.content);
+      return this.complete(final?.id ?? null, final?.title ?? this.mission.title, final?.content ?? ap.content, undefined, p.proposal);
     }
     if (ap.type === "QUESTION" && p.reason === "TASK_FAILED" && task) {
       await markRead(this.db, msg);

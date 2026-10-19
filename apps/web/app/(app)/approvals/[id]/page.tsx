@@ -27,9 +27,11 @@ export default async function ApprovalPage({ params }: { params: Promise<{ id: s
   if (!req) notFound();
 
   const p = (req.payload ?? {}) as ApprovalPayload;
+  // F108 역제안을 승인해 시작한 미션
+  const startedId = (req.payload as { missionId?: string } | null)?.missionId;
   const [[agent], [mission], [task], [artifact]] = await Promise.all([
     req.agentId ? db.select().from(schema.agents).where(eq(schema.agents.id, req.agentId)) : [],
-    req.missionId ? db.select().from(schema.missions).where(eq(schema.missions.id, req.missionId)) : [],
+    (req.missionId ?? startedId) ? db.select().from(schema.missions).where(eq(schema.missions.id, (req.missionId ?? startedId)!)) : [],
     req.taskId ? db.select().from(schema.tasks).where(eq(schema.tasks.id, req.taskId)) : [],
     p.artifactId ? db.select().from(schema.artifacts).where(eq(schema.artifacts.id, p.artifactId)) : [],
   ]);
@@ -64,7 +66,7 @@ export default async function ApprovalPage({ params }: { params: Promise<{ id: s
         <div className="flex flex-col gap-1 text-sm">
           {mission && (
             <Link href={`/missions/${mission.id}`} className="underline">
-              미션: {mission.title}
+              {req.missionId ? "미션" : "▶ 시작한 미션"}: {mission.title}
             </Link>
           )}
           {task && <p>Task: {task.title}</p>}

@@ -64,6 +64,8 @@ export interface ApprovalPayload {
   artifactId?: string | null;
   /** QUESTION: TASK_FAILED(Task 실패 반복) | LEADER_FAILED(리더 처리 실패) | CALL_LIMIT(미션 AI 호출 상한 도달) | REJECT_LIMIT(반려 한도에도 검토 미통과, F107) */
   reason?: "TASK_FAILED" | "LEADER_FAILED" | "CALL_LIMIT" | "REJECT_LIMIT";
+  /** F108 FINAL: 최종 결과에 적은 다음 제안 (최종 승인 때 승인함에 올림) */
+  proposal?: { topic: string; goal?: string | null; reason?: string | null } | null;
   /** LEADER_FAILED: 승인하면 다시 처리할 메시지 */
   retryMessageId?: string;
 }
