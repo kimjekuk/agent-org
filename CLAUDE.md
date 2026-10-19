@@ -17,6 +17,7 @@
 - 요청 범위만 최소 수정, 로드맵 밖 기능 선구현 금지
 - 모바일 우선: 모든 화면은 375px에서 먼저 확인. 지시·승인·결과·긴급정지는 모바일 완전 동작
 - 운영자는 비개발자: 결과 보고는 "무엇이 바뀌었고 어떻게 확인하는지" 한 줄 + 복붙 가능한 명령
+- 답변 끝에는 항상 다음 할 일을 선택지(AskUserQuestion, 추천 1개 + 2~3개)로 준다. 직접 입력(Other)도 고를 수 있다. 운영자는 타이핑이 어렵다 (2026-10-20 사용자 요청)
 
 ## 스택
 TypeScript 단일. Next.js(App Router) + Auth.js + Drizzle / Node 워커 + BullMQ / PostgreSQL + Redis / Docker Compose (+ Tailscale serve)
