@@ -1,6 +1,7 @@
 import { isPersonalityType, PERSONALITY_TYPES } from "@agentorg/shared/agents/personality";
 import type { Avatar, ToolPermissions } from "@agentorg/shared/agents/templates";
 import { getDb, schema } from "@agentorg/shared/db";
+import { levelProgress, levelTitle, masteredSkills } from "@agentorg/shared/growth";
 import { agentDailyJournal, kstDayRange, shiftDay } from "@agentorg/shared/journal";
 import { listModelChoices } from "@agentorg/shared/llm/models";
 import { MEMORY_LABEL } from "@agentorg/shared/memory";
@@ -68,6 +69,9 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
   // F103 하루 일지
   const journal = await agentDailyJournal(db, agent.id, day);
   const today = kstDayRange().day;
+  // F102 성장
+  const growth = levelProgress(agent.xp);
+  const mastered = masteredSkills(agent.skillXp as Record<string, number>);
   const personality = isPersonalityType(agent.personalityType) ? PERSONALITY_TYPES[agent.personalityType] : null;
   const avatar = (agent.avatar ?? { hair: 0, face: 0, color: 0 }) as Avatar;
   const working = agent.status === "WORKING";
@@ -84,10 +88,19 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
         <div className="min-w-0">
           <h1 className="text-xl font-bold">{agent.name}</h1>
           <p className="text-sm opacity-70">
-            {RANK_LABEL[agent.rank]}
+            Lv.{growth.level} {levelTitle(growth.level)} · {RANK_LABEL[agent.rank]}
             {agent.supervisorId && names.get(agent.supervisorId) ? ` · 상사 ${names.get(agent.supervisorId)}` : ""}
           </p>
           <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>
+          <div className="mt-1 flex items-center gap-2" title={`경험치 ${agent.xp} / 다음 레벨 ${growth.next}`}>
+            <div className="h-1.5 w-28 overflow-hidden rounded-full bg-black/10 dark:bg-white/15" role="progressbar" aria-label="경험치" aria-valuenow={Math.round(growth.ratio * 100)} aria-valuemin={0} aria-valuemax={100}>
+              <div className="h-full bg-amber-400" style={{ width: `${Math.round(growth.ratio * 100)}%` }} />
+            </div>
+            <span className="text-xs opacity-60">
+              XP {agent.xp}/{growth.next}
+            </span>
+          </div>
+          {mastered.length > 0 && <p className="mt-1 text-xs">⭐ 숙련: {mastered.join(", ")}</p>}
           {personality && (
             <span className="ml-1 mt-1 inline-block rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
               {personality.emoji} {personality.label}

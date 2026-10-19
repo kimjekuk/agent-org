@@ -39,7 +39,9 @@ export default async function OrgPage() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-semibold">{agent.name}</span>
-                <span className="text-xs opacity-60">{RANK_LABEL[agent.rank]}</span>
+                <span className="text-xs opacity-60">
+                  Lv.{agent.level} · {RANK_LABEL[agent.rank]}
+                </span>
                 <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
