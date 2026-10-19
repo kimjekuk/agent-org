@@ -1,5 +1,6 @@
 "use client";
 
+import { PERSONALITY_TYPES, type PersonalityType } from "@agentorg/shared/agents/personality";
 import { COLOR_NAMES, FACE_NAMES, HAIR_NAMES, type ToolPermissions, TOOL_NAMES } from "@agentorg/shared/agents/templates";
 import { useActionState, useRef } from "react";
 import { button, errorText, input } from "@/lib/ui";
@@ -75,6 +76,7 @@ interface ProfileProps {
     name: string;
     rank: string;
     personality: string | null;
+    personalityType: string | null;
     skills: string[];
     supervisorId: string | null;
     modelPrimary: string | null;
@@ -120,7 +122,18 @@ export function ProfileForm({ agent, supervisors, models }: ProfileProps) {
         </label>
       </div>
       <label className={field}>
-        성격
+        성격 유형 (일하는 방식·말투)
+        <select name="personalityType" defaultValue={agent.personalityType ?? ""} className={select}>
+          <option value="">정하지 않음</option>
+          {(Object.keys(PERSONALITY_TYPES) as PersonalityType[]).map((k) => (
+            <option key={k} value={k}>
+              {PERSONALITY_TYPES[k].emoji} {PERSONALITY_TYPES[k].label} — {PERSONALITY_TYPES[k].desc}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className={field}>
+        성격 (자유 입력)
         <input name="personality" defaultValue={agent.personality ?? ""} maxLength={200} className={input} />
       </label>
       <label className={field}>

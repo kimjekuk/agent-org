@@ -4,7 +4,7 @@ import { getDb, schema } from "@agentorg/shared/db";
 import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import Link from "next/link";
 import { AgentAvatar } from "@/components/AgentAvatar";
-import { RANK_LABEL, statusBadge } from "@/lib/agents";
+import { RANK_LABEL, isRestTime, statusBadge } from "@/lib/agents";
 import { MISSION_STATUS, progress } from "@/lib/missions";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
@@ -164,7 +164,7 @@ export default async function DashboardPage() {
         )}
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {team.map((a) => {
-            const badge = statusBadge(a);
+            const badge = statusBadge(a, isRestTime(org));
             return (
               <li key={a.id} className={`${card} flex flex-col items-center gap-2 p-3 text-center`}>
                 <AgentAvatar avatar={a.avatar as Avatar | null} size={52} label={a.name} />

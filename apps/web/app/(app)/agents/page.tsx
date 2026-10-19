@@ -3,7 +3,7 @@ import { getDb, schema } from "@agentorg/shared/db";
 import { asc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { AgentAvatar } from "@/components/AgentAvatar";
-import { RANK_LABEL, statusBadge } from "@/lib/agents";
+import { RANK_LABEL, isRestTime, statusBadge } from "@/lib/agents";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { button, card } from "@/lib/ui";
@@ -63,7 +63,7 @@ export default async function AgentsPage() {
 
       <ul className="grid gap-3 sm:grid-cols-2">
         {list.map((a) => {
-          const badge = statusBadge(a);
+          const badge = statusBadge(a, isRestTime(org));
           const skills = (a.skills ?? []) as string[];
           return (
             <li key={a.id}>

@@ -1,6 +1,7 @@
 "use server";
 
 // F005 에이전트 채용·프로필 · F009 사용자 직접 지시. 모든 변경은 AuditLog에 기록한다 (CLAUDE.md 절대 규칙 4).
+import { isPersonalityType } from "@agentorg/shared/agents/personality";
 import { AGENT_DEFAULTS, type AgentTemplate, CONTENT_TEAM, defaultModelFor, ROLE_TEMPLATES, type ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import { type AnyDb, getDb, schema } from "@agentorg/shared/db";
@@ -31,6 +32,7 @@ async function insertAgent(db: AnyDb, orgId: string, userId: string, t: AgentTem
       name,
       rank: t.rank,
       personality: t.personality,
+      personalityType: t.personalityType,
       skills: t.skills,
       avatar: t.avatar,
       toolPermissions: t.toolPermissions,
@@ -107,6 +109,7 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
     name,
     rank: rank as typeof agent.rank,
     personality: String(form.get("personality") ?? "").trim().slice(0, 200) || null,
+    personalityType: isPersonalityType(form.get("personalityType")) ? String(form.get("personalityType")) : null,
     skills,
     supervisorId,
     modelPrimary,
@@ -147,6 +150,7 @@ export async function cloneAgent(form: FormData) {
         name: `${agent.name} 2`.slice(0, 20),
         avatar: agent.avatar,
         personality: agent.personality,
+        personalityType: agent.personalityType,
         rank: agent.rank,
         supervisorId: agent.supervisorId,
         skills: agent.skills,
