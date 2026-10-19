@@ -148,13 +148,14 @@ export function ProfileForm({ agent, supervisors, models }: ProfileProps) {
             <input type="checkbox" name={`tool_${k}`} defaultChecked={Boolean(agent.toolPermissions[k])} className="h-5 w-5" />
             {TOOL_NAMES[k]}
             {k === "web_search" && <span className="text-xs opacity-60">회당 14원</span>}
+            {k === "code_exec" && <span className="text-xs opacity-60">Sonnet·Opus만</span>}
           </label>
         ))}
       </fieldset>
 
       <label className={field}>
         기본 모델
-        <select name="modelPrimary" defaultValue={agent.modelPrimary ?? models[0].id} className={select}>
+        <select key={agent.modelPrimary ?? ""} name="modelPrimary" defaultValue={agent.modelPrimary ?? models[0].id} className={select}>
           {models.map((m) => (
             <option key={m.id} value={m.id}>
               {m.label}

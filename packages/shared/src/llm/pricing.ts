@@ -14,6 +14,14 @@ export function supportsWebSearch(model: string): boolean {
   return WEB_SEARCH_MODELS.has(model);
 }
 
+/**
+ * F110 코드 실행 도구(code_execution_20260521)를 쓰는 모델. 웹 검색과 같은 Sonnet·Opus 계열 (2026-10-19 결정).
+ * 요금: 조직당 월 1,550시간 무료, 넘으면 시간당 $0.05 (웹 검색과 함께 쓰면 무료) — 토큰 비용과 별도로 집계하지 않는다
+ */
+export function supportsCodeExecution(model: string): boolean {
+  return WEB_SEARCH_MODELS.has(model);
+}
+
 /** 에이전트 프로필에서 고를 수 있는 모델 (요금: 입력/출력 100만 토큰당) */
 export const MODEL_CHOICES = [
   { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 — 균형 ($2 / $10)" },

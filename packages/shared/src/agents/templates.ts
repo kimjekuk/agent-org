@@ -18,11 +18,14 @@ export type ToolPermissions = {
   document?: boolean;
   /** F107: 미션 Task 결과를 리더 대신 검토한다 */
   qa_review?: boolean;
+  /** F110: Anthropic 샌드박스에서 파이썬 실행 (계산·표·데이터 정리) */
+  code_exec?: boolean;
 };
 export const TOOL_NAMES: Record<keyof ToolPermissions, string> = {
   web_search: "웹 검색",
   document: "문서 작성 (산출물 저장)",
   qa_review: "품질 검토 담당 (QA) — 리더 대신 Task 결과 검토",
+  code_exec: "코드 실행 (계산·표·데이터 정리)",
 };
 
 export interface AgentTemplate {
@@ -57,7 +60,7 @@ export const AGENT_DEFAULTS = {
   maxTurns: 20,
 } as const;
 
-/** 채용할 때의 기본 모델: 웹 검색 권한이 있으면 검색되는 Sonnet, 아니면 Haiku (2026-10-18 결정) */
+/** 채용할 때의 기본 모델: 웹 검색·코드 실행 권한이 있으면 그 도구가 되는 Sonnet, 아니면 Haiku (2026-10-18·19 결정) */
 export function defaultModelFor(perms: ToolPermissions): string {
-  return perms.web_search ? DEFAULT_MODELS.search : DEFAULT_MODELS.primary;
+  return perms.web_search || perms.code_exec ? DEFAULT_MODELS.search : DEFAULT_MODELS.primary;
 }

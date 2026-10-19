@@ -7,6 +7,7 @@ import { writeAudit } from "@agentorg/shared/audit";
 import { type AnyDb, getDb, schema } from "@agentorg/shared/db";
 import { publishOrgEvent } from "@agentorg/shared/events";
 import { listModelChoices } from "@agentorg/shared/llm/models";
+import { DEFAULT_MODELS, supportsCodeExecution } from "@agentorg/shared/llm/pricing";
 import { enqueueAgentRun } from "@agentorg/shared/queue";
 import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -88,7 +89,7 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
   if (!["LEADER", "MANAGER", "MEMBER"].includes(rank)) return { error: "직급이 올바르지 않습니다" };
   const supervisorId = String(form.get("supervisorId") ?? "") || null;
   if (supervisorId && (supervisorId === agent.id || !(await getOrgAgent(org.id, supervisorId)))) return { error: "상사를 다시 골라 주세요" };
-  const modelPrimary = String(form.get("modelPrimary"));
+  let modelPrimary = String(form.get("modelPrimary"));
   const modelEconomy = String(form.get("modelEconomy"));
   const choices = await listModelChoices(getDb());
   if (!choices.some((m) => m.id === modelPrimary) || !choices.some((m) => m.id === modelEconomy)) return { error: "모델을 다시 골라 주세요 (꺼진 모델은 고를 수 없습니다)" };
@@ -106,8 +107,13 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
     web_search: form.get("tool_web_search") === "on",
     document: form.get("tool_document") === "on",
     qa_review: form.get("tool_qa_review") === "on",
+    code_exec: form.get("tool_code_exec") === "on",
   };
   const avatar = { hair: Number(form.get("hair")) % 4, face: Number(form.get("face")) % 4, color: Number(form.get("color")) % 6 };
+  // F110: 코드 실행을 새로 켰는데 그 도구를 못 쓰는 모델(Haiku 등)이면 Sonnet으로 바꾼다 (2026-10-19 결정)
+  const before = (agent.toolPermissions ?? {}) as ToolPermissions;
+  const switched = toolPermissions.code_exec && !before.code_exec && !supportsCodeExecution(modelPrimary);
+  if (switched) modelPrimary = DEFAULT_MODELS.search;
 
   const changes = {
     name,
@@ -138,7 +144,7 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
   });
   await publishOrgEvent(org.id, { type: "agent", agentId: agent.id });
   revalidatePath(`/agents/${agent.id}`);
-  return { ok: "저장했습니다" };
+  return { ok: switched ? "저장했습니다. 코드 실행은 Claude Sonnet·Opus만 되어 기본 모델을 Sonnet 5.5로 바꿨습니다." : "저장했습니다" };
 }
 
 export async function cloneAgent(form: FormData) {
