@@ -14,12 +14,14 @@ import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
 import { awardXp, XP } from "@agentorg/shared/growth";
 import { knowledgeContext } from "@agentorg/shared/knowledge";
 import { extractSection, MEMO_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
+import { missionKind } from "@agentorg/shared/missions";
 import { allowedAfterHours, isWithinWorkHours, parseWorkHours } from "@agentorg/shared/schedule";
 import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import { runTurn, type StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
 import { type Agent, type Deps, type Enqueue, type Message, type Publish, preview, setStatus, titleOf } from "./common";
 import { handleLeaderMessage, isLeaderWork } from "./leader";
+import { handleMeetingTurn } from "./meeting";
 
 export interface RunDeps {
   provider?: LLMProvider; // 테스트에서 가짜 제공사 주입
@@ -103,11 +105,12 @@ async function firstActive(db: AnyDb, list: Message[]): Promise<Message | undefi
   return undefined;
 }
 
-/** 메시지 1개 처리: 미션 리더의 일이면 리더 루프로, 아니면 지시 처리 */
+/** 메시지 1개 처리: 회의 차례면 회의, 미션 리더의 일이면 리더 루프로, 아니면 지시 처리 */
 async function handleMessage(db: AnyDb, job: RunAgentJob, msg: Message, deps: Deps): Promise<StopReason | undefined> {
   const [agent] = await db.select().from(agents).where(eq(agents.id, job.agentId));
   if (msg.missionId) {
     const [mission] = await db.select().from(missions).where(eq(missions.id, msg.missionId));
+    if (mission && missionKind(msg.payload) === "MEETING") return handleMeetingTurn(db, agent, mission, msg, deps);
     if (mission && isLeaderWork(mission, agent, msg)) return handleLeaderMessage(db, agent, mission, msg, deps);
   }
   return handleDirective(db, job, agent, msg, deps);

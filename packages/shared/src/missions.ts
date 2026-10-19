@@ -36,12 +36,16 @@ export const CALL_LIMIT_STEP = 60;
  * - FINALIZE: 리더가 스스로에게 — 모든 Task 완료, 최종 통합
  * - TASK: 리더가 담당에게 — Task 수행 지시
  * - RESUME: 시스템이 리더에게 — 멈춘 미션을 마지막으로 끝난 단계 다음부터 이어서 (F109)
+ * - MEETING: 리더·앞 참여자가 다음 참여자에게 — 회의에서 의견 말하기 (F104)
+ * - MEETING_WRAP: 마지막 참여자·사용자 답글이 리더에게 — 회의 결론 정리 (F104)
  */
-export type MissionMessageKind = "MISSION_START" | "APPROVAL" | "NOTE" | "TASK_MOVED" | "FINALIZE" | "TASK" | "RESUME";
+export type MissionMessageKind = "MISSION_START" | "APPROVAL" | "NOTE" | "TASK_MOVED" | "FINALIZE" | "TASK" | "RESUME" | "MEETING" | "MEETING_WRAP";
 
 export interface MissionMessagePayload {
   kind: MissionMessageKind;
   approvalId?: string;
+  /** MEETING · MEETING_WRAP: 어느 회의인지 */
+  meetingId?: string;
 }
 
 export interface ApprovalPayload {
