@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "skill_xp" jsonb DEFAULT '{}'::jsonb NOT NULL;

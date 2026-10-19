@@ -19,10 +19,11 @@ import {
   missionKind,
   needsCheckpoint,
 } from "@agentorg/shared/missions";
+import { awardXp, masteredSkills, matchingSkills, XP } from "@agentorg/shared/growth";
 import { addArtifactToKnowledge, knowledgeContext } from "@agentorg/shared/knowledge";
 import { clearMemoriesBySource, extractSection, LESSON_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
 import { notifyOrgOwner } from "@agentorg/shared/push";
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
 import { type Agent, clip, type Deps, type Message, type Mission, preview, setStatus, titleOf } from "./common";
@@ -338,6 +339,12 @@ class Leader {
         reasoning: `${feedback}${forced}`,
       });
     });
+    // F102: 검토를 제대로 통과하면 담당에게 경험치 + 쓰인 특기 숙련
+    if (pass && task.assigneeId) {
+      const [assignee] = await this.db.select({ skills: agents.skills }).from(agents).where(eq(agents.id, task.assigneeId));
+      const skills = matchingSkills((assignee?.skills ?? []) as string[], (task.requiredSkills ?? []) as string[]);
+      await awardXp(this.db, { agentId: task.assigneeId, amount: XP.REVIEW_PASS, reason: `"${preview(task.title)}" 검토 통과`, skills });
+    }
     if (checkpoint) {
       await this.requestApproval("CHECKPOINT", "TASK", `Task 결과 승인 요청 — "${task.title}"`, { artifactId: result.artifactId }, task.id);
     } else {
@@ -439,6 +446,18 @@ class Leader {
       artifactId,
       ...(r ? { costKrw: Number(r.costKrw.toFixed(4)), model: r.model } : {}),
     });
+    // F102: 예산의 절반 이하로 끝내면 참여자 모두에게 경험치
+    const [{ spent }] = await this.db
+      .select({ spent: sql<string>`coalesce(sum(${costLogs.cost}), 0)` })
+      .from(costLogs)
+      .where(eq(costLogs.missionId, this.mission.id));
+    if (Number(spent) <= this.mission.budgetLimit / 2) {
+      const list = await this.tasks();
+      const participants = [...new Set([this.leader.id, ...list.map((t) => t.assigneeId).filter((x): x is string => Boolean(x))])];
+      for (const agentId of participants) {
+        await awardXp(this.db, { agentId, amount: XP.UNDER_BUDGET, reason: `미션 "${preview(this.mission.title)}" 예산 절약 (${Math.round(Number(spent))}원 / ${this.mission.budgetLimit}원)` });
+      }
+    }
     // F105: 미션 최종 결과는 조직 지식 베이스에 넣는다
     if (artifactId) {
       const [art] = await this.db.select().from(artifacts).where(eq(artifacts.id, artifactId));
@@ -833,15 +852,18 @@ async function markRead(db: Db, msg: Message) {
 }
 
 /**
- * 담당 고르기 (PRD F007 3단계: 특기 일치도 + 현재 부하).
+ * 담당 고르기 (PRD F007 3단계: 특기 일치도 + 숙련(F102) + 현재 부하).
  * 리더가 이름을 정했고 그 사람이 팀에 있으면 그대로, 아니면 특기가 많이 겹치는 사람 → 맡은 일이 적은 사람.
  */
 export function pickAssignee(team: Agent[], name: string | null | undefined, skills: string[], load: Map<string, number>): Agent {
   const named = name ? team.find((a) => a.name === name.trim()) : undefined;
   if (named) return named;
+  // 특기 일치 수 + F102 숙련된 특기는 0.5점 더
   const score = (a: Agent) => {
     const mine = ((a.skills ?? []) as string[]).map((s) => s.toLowerCase());
-    return skills.filter((s) => mine.some((m) => m.includes(s.toLowerCase()) || s.toLowerCase().includes(m))).length;
+    const base = skills.filter((s) => mine.some((m) => m.includes(s.toLowerCase()) || s.toLowerCase().includes(m))).length;
+    const mastered = matchingSkills(masteredSkills(a.skillXp as Record<string, number>), skills).length;
+    return base + mastered * 0.5;
   };
   return [...team].sort((a, b) => score(b) - score(a) || (load.get(a.id) ?? 0) - (load.get(b.id) ?? 0))[0];
 }

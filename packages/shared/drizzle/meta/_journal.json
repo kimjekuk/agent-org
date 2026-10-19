@@ -71,6 +71,13 @@
       "when": 1792392365163,
       "tag": "0009_wise_jackal",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792418965585,
+      "tag": "0010_lumpy_richard_fisk",
+      "breakpoints": true
     }
   ]
 }

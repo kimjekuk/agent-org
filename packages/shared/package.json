@@ -28,7 +28,8 @@
     "./memory": "./src/memory.ts",
     "./recovery": "./src/recovery.ts",
     "./knowledge": "./src/knowledge.ts",
-    "./journal": "./src/journal.ts"
+    "./journal": "./src/journal.ts",
+    "./growth": "./src/growth.ts"
   },
   "scripts": {
     "typecheck": "tsc",
