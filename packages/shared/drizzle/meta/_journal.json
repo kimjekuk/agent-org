@@ -64,6 +64,13 @@
       "when": 1792328008816,
       "tag": "0008_tan_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792392365163,
+      "tag": "0009_wise_jackal",
+      "breakpoints": true
     }
   ]
 }

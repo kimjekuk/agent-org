@@ -21,12 +21,14 @@
     "./events": "./src/events.ts",
     "./queue": "./src/queue.ts",
     "./agents/templates": "./src/agents/templates.ts",
+    "./agents/personality": "./src/agents/personality.ts",
     "./missions": "./src/missions.ts",
     "./push": "./src/push.ts",
     "./schedule": "./src/schedule.ts",
     "./memory": "./src/memory.ts",
     "./recovery": "./src/recovery.ts",
-    "./knowledge": "./src/knowledge.ts"
+    "./knowledge": "./src/knowledge.ts",
+    "./journal": "./src/journal.ts"
   },
   "scripts": {
     "typecheck": "tsc",

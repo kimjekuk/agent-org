@@ -1,12 +1,14 @@
+import { isPersonalityType, PERSONALITY_TYPES } from "@agentorg/shared/agents/personality";
 import type { Avatar, ToolPermissions } from "@agentorg/shared/agents/templates";
 import { getDb, schema } from "@agentorg/shared/db";
+import { agentDailyJournal, kstDayRange, shiftDay } from "@agentorg/shared/journal";
 import { listModelChoices } from "@agentorg/shared/llm/models";
 import { MEMORY_LABEL } from "@agentorg/shared/memory";
 import { and, asc, desc, eq, inArray, ne, or } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AgentAvatar } from "@/components/AgentAvatar";
-import { getOrgAgent, RANK_LABEL, statusBadge } from "@/lib/agents";
+import { getOrgAgent, RANK_LABEL, isRestTime, statusBadge } from "@/lib/agents";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonDanger, buttonGhost, card } from "@/lib/ui";
@@ -19,11 +21,13 @@ export const dynamic = "force-dynamic";
 
 const timeFmt = new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" });
 const won = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2 });
+const clockFmt = new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" });
 const TYPE_LABEL = { DIRECTIVE: "지시", REPORT: "보고", QUESTION: "질문", PROPOSAL: "제안" } as const;
 
 // F005 프로필 + F009 대화(지시·보고) + 직접 지시
-export default async function AgentPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AgentPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ day?: string }> }) {
   const { id } = await params;
+  const { day } = await searchParams;
   const user = await requireUser();
   const org = await getCurrentOrg(user.id);
   if (!org) notFound();
@@ -60,7 +64,11 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
   const missionTitle = new Map(
     (missionIds.length ? await db.select({ id: schema.missions.id, title: schema.missions.title }).from(schema.missions).where(inArray(schema.missions.id, missionIds)) : []).map((m) => [m.id, m.title]),
   );
-  const badge = statusBadge(agent);
+  const badge = statusBadge(agent, isRestTime(org));
+  // F103 하루 일지
+  const journal = await agentDailyJournal(db, agent.id, day);
+  const today = kstDayRange().day;
+  const personality = isPersonalityType(agent.personalityType) ? PERSONALITY_TYPES[agent.personalityType] : null;
   const avatar = (agent.avatar ?? { hair: 0, face: 0, color: 0 }) as Avatar;
   const working = agent.status === "WORKING";
 
@@ -80,6 +88,11 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
             {agent.supervisorId && names.get(agent.supervisorId) ? ` · 상사 ${names.get(agent.supervisorId)}` : ""}
           </p>
           <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>
+          {personality && (
+            <span className="ml-1 mt-1 inline-block rounded-full bg-black/5 px-2 py-0.5 text-xs dark:bg-white/10">
+              {personality.emoji} {personality.label}
+            </span>
+          )}
         </div>
       </section>
 
@@ -133,6 +146,7 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
                 name: agent.name,
                 rank: agent.rank,
                 personality: agent.personality,
+                personalityType: agent.personalityType,
                 skills: (agent.skills ?? []) as string[],
                 supervisorId: agent.supervisorId,
                 modelPrimary: agent.modelPrimary,
@@ -145,6 +159,96 @@ export default async function AgentPage({ params }: { params: Promise<{ id: stri
               supervisors={others}
               models={models}
             />
+          </div>
+        </details>
+
+        <details id="journal" className={`${card} scroll-mt-20`} open={Boolean(day)}>
+          <summary className="cursor-pointer font-semibold">📔 하루 일지</summary>
+          <div className="flex flex-col gap-3 pt-3 text-sm">
+            <nav className="flex items-center justify-between gap-2" aria-label="날짜">
+              <Link href={`?day=${shiftDay(journal.day, -1)}#journal`} className={`${buttonGhost} flex items-center`}>
+                ← 전날
+              </Link>
+              <span className="font-semibold">{journal.day === today ? `오늘 (${journal.day})` : journal.day}</span>
+              {journal.day < today ? (
+                <Link href={`?day=${shiftDay(journal.day, 1)}#journal`} className={`${buttonGhost} flex items-center`}>
+                  다음날 →
+                </Link>
+              ) : (
+                <span className="w-20" />
+              )}
+            </nav>
+            {journal.llmCalls === 0 && journal.reports === 0 && journal.failures.length === 0 ? (
+              <p className="opacity-60">이날은 한 일이 없습니다.</p>
+            ) : (
+              <>
+                <ul className="grid grid-cols-2 gap-2">
+                  <li className="rounded-lg bg-black/5 p-3 dark:bg-white/10">보고 <b>{journal.reports}</b>건</li>
+                  <li className="rounded-lg bg-black/5 p-3 dark:bg-white/10">끝낸 Task <b>{journal.tasksDone}</b>개</li>
+                  <li className="rounded-lg bg-black/5 p-3 dark:bg-white/10">AI 호출 <b>{journal.llmCalls}</b>회</li>
+                  <li className="rounded-lg bg-black/5 p-3 dark:bg-white/10">비용 <b>{won.format(journal.costKrw)}</b>원</li>
+                </ul>
+                {journal.firstAt && journal.lastAt && (
+                  <p className="opacity-70">
+                    일한 시간: {clockFmt.format(journal.firstAt)} ~ {clockFmt.format(journal.lastAt)}
+                  </p>
+                )}
+                {journal.missions.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold">참여한 미션</h3>
+                    <ul className="list-disc pl-5">
+                      {journal.missions.map((m) => (
+                        <li key={m.id}>
+                          <Link href={`/missions/${m.id}`} className="underline">
+                            {m.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {journal.artifacts.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold">만든 산출물</h3>
+                    <ul className="list-disc pl-5">
+                      {journal.artifacts.map((a) => (
+                        <li key={a.id}>
+                          <Link href={`/artifacts/${a.id}`} className="underline">
+                            {a.title}
+                          </Link>{" "}
+                          <span className="opacity-60">
+                            v{a.version}
+                            {a.rating ? ` · ★${a.rating}` : ""}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {journal.failures.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-red-600 dark:text-red-400">막힌 일 {journal.failures.length}건</h3>
+                    <ul className="list-disc pl-5">
+                      {journal.failures.map((f, i) => (
+                        <li key={i}>
+                          {clockFmt.format(f.at)} {f.content}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {journal.memories.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold">새로 기억한 것</h3>
+                    <ul className="list-disc pl-5">
+                      {journal.memories.map((m, i) => (
+                        <li key={i}>{m}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </details>
 

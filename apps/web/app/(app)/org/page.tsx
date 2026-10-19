@@ -1,9 +1,10 @@
+import { isPersonalityType, PERSONALITY_TYPES } from "@agentorg/shared/agents/personality";
 import type { Avatar } from "@agentorg/shared/agents/templates";
 import { getDb, schema } from "@agentorg/shared/db";
 import { asc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { AgentAvatar } from "@/components/AgentAvatar";
-import { type Agent, RANK_LABEL, statusBadge } from "@/lib/agents";
+import { type Agent, RANK_LABEL, isRestTime, statusBadge } from "@/lib/agents";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonGhost } from "@/lib/ui";
@@ -27,7 +28,7 @@ export default async function OrgPage() {
   const childrenOf = (id: string) => sort(active.filter((a) => a.supervisorId === id));
 
   const Node = ({ agent, depth }: { agent: Agent; depth: number }) => {
-    const badge = statusBadge(agent);
+    const badge = statusBadge(agent, isRestTime(org));
     const skills = (agent.skills ?? []) as string[];
     const kids = childrenOf(agent.id);
     return (
@@ -51,7 +52,13 @@ export default async function OrgPage() {
             </div>
           </summary>
           <div className="flex flex-col gap-3 border-t border-black/10 p-3 dark:border-white/15">
-            {agent.personality && <p className="text-sm opacity-80">성격: {agent.personality}</p>}
+            {(agent.personality || isPersonalityType(agent.personalityType)) && (
+              <p className="text-sm opacity-80">
+                성격: {isPersonalityType(agent.personalityType) ? `${PERSONALITY_TYPES[agent.personalityType].emoji} ${PERSONALITY_TYPES[agent.personalityType].label}` : ""}
+                {agent.personality && isPersonalityType(agent.personalityType) ? " · " : ""}
+                {agent.personality}
+              </p>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <Link href={`/agents/${agent.id}#directive`} className={`${buttonGhost} flex items-center justify-center`}>
                 ✍️ 지시하기
