@@ -1,6 +1,7 @@
 // F007 리더 루프 (PRD 5장 F007/F008): 미션 수신 → Task 분해 → 배정 → 지시 → 보고 검토 → 최종 통합 → 사용자 보고.
 // 메시지 1개 = 한 턴. 턴은 member.ts의 runAgent가 runTurn(guards)으로 실행한다 (CLAUDE.md 절대 규칙 1).
 // Task는 순서대로 하나씩 진행하고, 앞 Task 결과를 다음 담당에게 넘긴다 (2026-10-18 결정).
+import { personalityPrompt } from "@agentorg/shared/agents/personality";
 import type { ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
@@ -637,6 +638,7 @@ class Leader {
           name: this.leader.name,
           role: `리더${skills.length ? ` (${skills.join(", ")})` : ""}`,
           personality: this.leader.personality,
+          style: personalityPrompt(this.leader.personalityType),
           skills,
           instructions: [
             "- 미션을 Task로 나누고, 팀원의 결과를 검토하고, 최종 결과로 통합한다.",

@@ -8,6 +8,8 @@ export interface AgentPromptParts {
   name: string;
   role: string;
   personality?: string | null;
+  /** F103 성격 유형에 따른 일하는 방식·말투 */
+  style?: string;
   skills?: string[];
   /** 역할별 추가 지침 */
   instructions?: string;
@@ -24,6 +26,7 @@ export function buildSystemPrompt(parts: AgentPromptParts): string {
   ];
   if (parts.personality) lines.push(`성격: ${parts.personality}`);
   if (parts.skills?.length) lines.push(`특기: ${parts.skills.join(", ")}`);
+  if (parts.style) lines.push(`# 일하는 방식\n${parts.style}`);
   if (parts.instructions) lines.push(`# 지침\n${parts.instructions}`);
   if (parts.memory) lines.push(`# 기억\n${parts.memory}`);
   if (parts.knowledge) lines.push(`# 조직 지식 (참고)\n${parts.knowledge}`);

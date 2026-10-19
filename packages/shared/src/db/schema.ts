@@ -69,6 +69,7 @@ export const agents = pgTable("agents", {
   name: text("name").notNull(),
   avatar: jsonb("avatar"),
   personality: text("personality"),
+  personalityType: text("personality_type"), // F103 성격 유형 (agents/personality.ts)
   rank: agentRank("rank").notNull().default("MEMBER"),
   supervisorId: uuid("supervisor_id").references((): AnyPgColumn => agents.id, { onDelete: "set null" }),
   skills: jsonb("skills").$type<string[]>().notNull().default([]),
