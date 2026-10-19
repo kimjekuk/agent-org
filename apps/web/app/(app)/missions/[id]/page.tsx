@@ -1,5 +1,6 @@
 import type { Avatar } from "@agentorg/shared/agents/templates";
 import { getDb, schema } from "@agentorg/shared/db";
+import { MEETING_LABEL } from "@agentorg/shared/meetings";
 import { AUTONOMY_LABEL, type Autonomy } from "@agentorg/shared/missions";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import Link from "next/link";
@@ -10,7 +11,7 @@ import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonDanger, buttonGhost, card } from "@/lib/ui";
 import { cancelMission, moveTask, pauseMission, resumeMission } from "../actions";
-import { MissionSettingsForm, NoteForm } from "../forms";
+import { MeetingReplyForm, MissionSettingsForm, NoteForm } from "../forms";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ const TYPE_LABEL = { DIRECTIVE: "지시", REPORT: "보고", QUESTION: "질문", 
 const TABS = [
   { key: "board", label: "보드" },
   { key: "log", label: "대화" },
+  { key: "meetings", label: "회의" },
   { key: "artifacts", label: "산출물" },
   { key: "cost", label: "비용" },
 ] as const;
@@ -135,9 +137,9 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
         )}
         {!closed && (
           <details className={card}>
-            <summary className="cursor-pointer text-sm font-semibold">자율성 · 예산 변경</summary>
+            <summary className="cursor-pointer text-sm font-semibold">자율성 · 예산 · 회의 변경</summary>
             <div className="pt-3">
-              <MissionSettingsForm id={mission.id} autonomy={autonomy} budgetLimit={mission.budgetLimit} />
+              <MissionSettingsForm id={mission.id} autonomy={autonomy} budgetLimit={mission.budgetLimit} meetings={mission.meetings} />
             </div>
           </details>
         )}
@@ -255,6 +257,7 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
       )}
 
       {tab === "log" && <MissionLog missionId={mission.id} agentById={agentById} closed={mission.status === "CANCELLED"} />}
+      {tab === "meetings" && <MissionMeetings missionId={mission.id} agentById={agentById} enabled={mission.meetings} cancelled={mission.status === "CANCELLED"} />}
       {tab === "artifacts" && <MissionArtifacts missionId={mission.id} agentById={agentById} taskTitles={new Map(taskList.map((t) => [t.id, t.title]))} />}
       {tab === "cost" && <MissionCost missionId={mission.id} agentById={agentById} used={used} limit={mission.budgetLimit} />}
     </main>
@@ -328,6 +331,74 @@ async function MissionLog({ missionId, agentById, closed }: { missionId: string;
       </section>
       <NoteForm id={missionId} disabled={closed} />
     </>
+  );
+}
+
+/** F104 회의록: 킥오프·회고, 발언 순서대로 + 리더 결론 + 사용자 답글 */
+async function MissionMeetings({ missionId, agentById, enabled, cancelled }: { missionId: string; agentById: AgentMap; enabled: boolean; cancelled: boolean }) {
+  const db = getDb();
+  const list = await db.select().from(schema.meetings).where(eq(schema.meetings.missionId, missionId)).orderBy(asc(schema.meetings.createdAt));
+  const turns = list.length
+    ? await db
+        .select()
+        .from(schema.meetingTurns)
+        .where(inArray(schema.meetingTurns.meetingId, list.map((m) => m.id)))
+        .orderBy(asc(schema.meetingTurns.createdAt))
+    : [];
+  return (
+    <section className="flex flex-col gap-3 px-4 pb-12" aria-label="회의">
+      {list.length === 0 && (
+        <p className="text-sm opacity-70">
+          {enabled ? "계획을 세우면 담당 팀원들이 킥오프 회의를 하고, 미션이 끝나면 회고 회의를 합니다." : "이 미션은 회의를 하지 않습니다. 위 '자율성 · 예산 · 회의 변경'에서 켤 수 있습니다."}
+        </p>
+      )}
+      {list.map((m) => {
+        const mine = turns.filter((t) => t.meetingId === m.id);
+        const names = ((m.participants ?? []) as string[]).map((id) => agentById.get(id)?.name ?? "(없음)");
+        return (
+          <article key={m.id} className={`${card} flex flex-col gap-3`}>
+            <header className="flex items-center gap-2">
+              <h2 className="min-w-0 flex-1 font-semibold">
+                {m.kind === "KICKOFF" ? "🚀" : "🔁"} {MEETING_LABEL[m.kind]}
+              </h2>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${m.status === "RUNNING" ? "bg-blue-100 text-blue-900 dark:bg-blue-900/40 dark:text-blue-100" : "bg-black/10 dark:bg-white/15"}`}>
+                {m.status === "RUNNING" ? "진행 중" : "끝남"}
+              </span>
+            </header>
+            <p className="text-xs opacity-60">
+              참여 {names.join(" → ")} · {timeFmt.format(m.createdAt)}
+            </p>
+            {m.conclusion && (
+              <div className="rounded-lg bg-green-50 p-3 text-sm dark:bg-green-950/40">
+                <p className="mb-1 text-xs font-semibold opacity-70">결론</p>
+                <p className="whitespace-pre-wrap break-words">{m.conclusion}</p>
+              </div>
+            )}
+            <ol className="flex flex-col gap-2">
+              {mine
+                .filter((t) => !(t.speakerType === "AGENT" && t.content.startsWith("[결론")))
+                .map((t) => {
+                  const fromUser = t.speakerType === "USER";
+                  const who = t.agentId ? agentById.get(t.agentId) : undefined;
+                  return (
+                    <li key={t.id} className={`flex max-w-[92%] items-end gap-2 ${fromUser ? "flex-row-reverse self-end" : "self-start"}`}>
+                      {!fromUser && <AgentAvatar avatar={who?.avatar as Avatar | null} size={28} label={who?.name ?? "에이전트"} />}
+                      <div className={`min-w-0 rounded-2xl px-3 py-2 text-sm ${fromUser ? "bg-foreground text-background" : "bg-black/5 dark:bg-white/10"}`}>
+                        <p className="mb-0.5 text-xs opacity-70">
+                          {fromUser ? "나" : (who?.name ?? "에이전트")} · {timeFmt.format(t.createdAt)}
+                        </p>
+                        <p className="whitespace-pre-wrap break-words">{t.content}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              {m.status === "RUNNING" && <li className="text-sm opacity-70">💬 다음 차례가 의견을 정리하는 중입니다…</li>}
+            </ol>
+            <MeetingReplyForm missionId={missionId} meetingId={m.id} disabled={cancelled} />
+          </article>
+        );
+      })}
+    </section>
   );
 }
 

@@ -4,6 +4,7 @@
 import { writeAudit } from "@agentorg/shared/audit";
 import { type AnyDb, getDb, schema } from "@agentorg/shared/db";
 import { publishOrgEvent } from "@agentorg/shared/events";
+import { addUserReply } from "@agentorg/shared/meetings";
 import { AUTONOMY_LABEL, type Autonomy, type MissionMessagePayload, OUTPUT_FORMATS } from "@agentorg/shared/missions";
 import { agentsWithPendingDirectives, enqueueAgentRun } from "@agentorg/shared/queue";
 import { isStalled, resumeMission as resumeStalledMission } from "@agentorg/shared/recovery";
@@ -74,6 +75,7 @@ export async function createMission(_prev: FormState, form: FormData): Promise<F
   const autonomy = String(form.get("autonomy")) as Autonomy;
   if (!AUTONOMIES.includes(autonomy)) return { error: "자율성 수준을 골라 주세요" };
   const referenceNotes = String(form.get("references") ?? "").trim().slice(0, 8000) || null;
+  const meetings = form.get("meetings") === "on";
 
   // 담당: 고르지 않으면 리더 자동 지정
   const db = getDb();
@@ -95,6 +97,7 @@ export async function createMission(_prev: FormState, form: FormData): Promise<F
       outputFormat,
       autonomy,
       referenceNotes,
+      meetings,
     }),
   );
   await enqueueAgentRun({ orgId: org.id, agentId: leader.id });
@@ -172,7 +175,8 @@ export async function updateMissionSettings(_prev: FormState, form: FormData): P
   const budgetLimit = Number(form.get("budgetLimit"));
   if (!Number.isInteger(budgetLimit) || budgetLimit < 0 || budgetLimit > 1000000) return { error: "예산 한도는 0~1,000,000원으로 입력해 주세요" };
 
-  const changes = { autonomy, budgetLimit };
+  const meetings = form.get("meetings") === "on";
+  const changes = { autonomy, budgetLimit, meetings };
   await getDb().transaction(async (tx) => {
     await tx.update(schema.missions).set(changes).where(eq(schema.missions.id, mission.id));
     await writeAudit(tx, {
@@ -182,8 +186,8 @@ export async function updateMissionSettings(_prev: FormState, form: FormData): P
       action: "mission.update",
       targetType: "mission",
       targetId: mission.id,
-      reasoning: `자율성 ${AUTONOMY_LABEL[autonomy]}, 예산 한도 ${budgetLimit}원`,
-      payload: { from: { autonomy: mission.autonomy, budgetLimit: mission.budgetLimit }, to: changes },
+      reasoning: `자율성 ${AUTONOMY_LABEL[autonomy]}, 예산 한도 ${budgetLimit}원, 회의 ${meetings ? "함" : "안 함"}`,
+      payload: { from: { autonomy: mission.autonomy, budgetLimit: mission.budgetLimit, meetings: mission.meetings }, to: changes },
     });
   });
   await publishOrgEvent(org.id, { type: "mission", missionId: mission.id });
@@ -251,4 +255,26 @@ export async function sendMissionNote(_prev: FormState, form: FormData): Promise
   if (org.emergencyStop) notes.push("긴급 정지 중이라 재개하면 전달됩니다");
   if (mission.status === "PAUSED") notes.push("일시정지 중이라 재개하면 전달됩니다");
   return { ok: notes.length ? `보냈습니다. ${notes.join(", ")}.` : "리더에게 보냈습니다. 이후 Task 지시에도 함께 전달됩니다." };
+}
+
+// ── F104 회의록에 사용자 답글 ─────────────────────────────
+
+export async function replyMeeting(_prev: FormState, form: FormData): Promise<FormState> {
+  const { user, org, mission } = await missionFromForm(form);
+  if (!mission) return { error: "미션을 찾을 수 없습니다" };
+  if (mission.status === "CANCELLED") return { error: "취소된 미션입니다" };
+  const content = String(form.get("content") ?? "").trim();
+  if (content.length < 1 || content.length > 2000) return { error: "답글은 1~2,000자로 입력해 주세요" };
+  const meetingId = String(form.get("meetingId") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(meetingId)) return { error: "회의를 찾을 수 없습니다" };
+  let job: Awaited<ReturnType<typeof addUserReply>>;
+  try {
+    job = await addUserReply(getDb(), { orgId: org.id, userId: user.id, meetingId, content });
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  if (job) await enqueueAgentRun(job);
+  await publishOrgEvent(org.id, { type: "mission", missionId: mission.id });
+  revalidatePath(`/missions/${mission.id}`);
+  return { ok: job ? "답글을 남겼습니다. 리더가 결론을 다시 정리합니다." : "답글을 남겼습니다. 다음 발언과 결론에 반영됩니다." };
 }

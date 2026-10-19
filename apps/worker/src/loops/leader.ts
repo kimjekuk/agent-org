@@ -5,7 +5,7 @@ import { personalityPrompt } from "@agentorg/shared/agents/personality";
 import type { ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
-import { agents, approvalRequests, artifacts, costLogs, messages, missions, tasks } from "@agentorg/shared/db/schema";
+import { agents, approvalRequests, artifacts, costLogs, meetings, meetingTurns, messages, missions, tasks } from "@agentorg/shared/db/schema";
 import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError, MissionCallLimitError } from "@agentorg/shared/llm/gateway";
 import { DEFAULT_MODELS } from "@agentorg/shared/llm/pricing";
 import {
@@ -21,30 +21,33 @@ import {
 } from "@agentorg/shared/missions";
 import { awardXp, masteredSkills, matchingSkills, XP } from "@agentorg/shared/growth";
 import { addArtifactToKnowledge, knowledgeContext } from "@agentorg/shared/knowledge";
+import { MEETING_LABEL, type MeetingKind, RETRO_LESSON_HEADING } from "@agentorg/shared/meetings";
 import { clearMemoriesBySource, extractSection, LESSON_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
 import { notifyOrgOwner } from "@agentorg/shared/push";
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
-import { type Agent, clip, type Deps, type Message, type Mission, preview, setStatus, titleOf } from "./common";
+import { type Agent, clip, type Deps, type Message, type Mission, missionBrief, preview, setStatus, titleOf } from "./common";
+import { kickoffRunning, meetingTranscript } from "./meeting";
 
 type Task = typeof tasks.$inferSelect;
 type Db = AnyDb;
 
 const TASK_PRIORITY = 50; // 사용자 직접 지시(100)보다 낮게
 
-/** 이 메시지가 미션 리더가 처리할 일인가 (계획·승인 결과·사용자 메모·Task 이동·통합·Task 보고 검토) */
+/** 이 메시지가 미션 리더가 처리할 일인가 (계획·승인 결과·사용자 메모·Task 이동·통합·Task 보고 검토·회의 결론) */
 export function isLeaderWork(mission: Mission, agent: Agent, msg: Message): boolean {
   if (mission.leaderId !== agent.id) return false;
   const kind = missionKind(msg.payload);
-  if (kind && kind !== "TASK") return true;
+  if (kind && kind !== "TASK" && kind !== "MEETING") return true;
   return msg.type === "REPORT" && Boolean(msg.taskId);
 }
 
 /** 리더의 한 턴. 멈춰야 하면 그 이유를 반환한다 (처리 못 한 메시지는 읽지 않은 채로 남는다). */
 export async function handleLeaderMessage(db: Db, leader: Agent, mission: Mission, msg: Message, deps: Deps): Promise<StopReason | undefined> {
   const kind = missionKind(msg.payload);
-  if (mission.status === "CANCELLED" || (mission.status === "DONE" && kind !== "NOTE")) {
+  // 끝난 미션에도 사용자 메시지 답변과 회고 회의 결론은 처리한다
+  if (mission.status === "CANCELLED" || (mission.status === "DONE" && kind !== "NOTE" && kind !== "MEETING_WRAP")) {
     await markRead(db, msg);
     return undefined;
   }
@@ -57,6 +60,7 @@ export async function handleLeaderMessage(db: Db, leader: Agent, mission: Missio
     else if (kind === "NOTE") await lead.replyToNote(msg);
     else if (kind === "FINALIZE") await lead.finalize(msg);
     else if (kind === "RESUME") await lead.resume(msg);
+    else if (kind === "MEETING_WRAP") await lead.wrapMeeting(msg);
     else if (kind === "TASK_MOVED") {
       await markRead(db, msg);
       await lead.advance();
@@ -96,6 +100,7 @@ const KIND_LABEL: Record<string, string> = {
   FINALIZE: "최종 결과 통합",
   TASK_MOVED: "Task 이동 반영",
   RESUME: "멈춘 미션 이어서 진행",
+  MEETING_WRAP: "회의 결론 정리",
   REPORT: "보고 검토",
 };
 
@@ -183,8 +188,17 @@ class Leader {
 
     const list = created.map((t, i) => `${i + 1}. ${t.title} — ${t.assigneeName}`).join("\n");
     await this.tellUser(`계획을 세웠습니다 (Task ${created.length}개)${parsed?.summary ? `: ${parsed.summary}` : ""}\n${list}`, { costKrw: r.costKrw, model: r.model });
+    // F104: 처음 세운 계획이면 킥오프 회의부터 (끝나면 wrapMeeting이 이어서 진행)
+    if (!rejectedComment && (await this.startMeeting("KICKOFF"))) return;
+    await this.afterPlan();
+  }
+
+  /** 계획(과 킥오프) 다음: 체크포인트면 계획 승인 요청, 아니면 첫 Task 지시 */
+  private async afterPlan(kickoff?: string | null) {
     if (needsCheckpoint(this.autonomy, "PLAN")) {
-      await this.requestApproval("CHECKPOINT", "PLAN", `계획 승인 요청 — "${this.mission.title}"\n${list}`);
+      const team = await this.db.select({ id: agents.id, name: agents.name }).from(agents).where(eq(agents.orgId, this.mission.orgId));
+      const list = (await this.tasks()).map((t, i) => `${i + 1}. ${t.title} — ${team.find((a) => a.id === t.assigneeId)?.name ?? "(없음)"}`).join("\n");
+      await this.requestApproval("CHECKPOINT", "PLAN", `계획 승인 요청 — "${this.mission.title}"\n${list}${kickoff ? `\n\n킥오프 회의 결론:\n${kickoff}` : ""}`);
     } else {
       await this.advance();
     }
@@ -201,6 +215,7 @@ class Leader {
       .where(and(eq(approvalRequests.missionId, m.id), inArray(approvalRequests.status, ["PENDING", "HELD"])))
       .limit(1);
     if (open) return;
+    if (await kickoffRunning(this.db, m.id)) return; // F104 킥오프 회의가 끝나면 시작
 
     const list = await this.tasks();
     if (list.some((t) => t.status === "DOING" || t.status === "REVIEW")) return;
@@ -470,6 +485,105 @@ class Leader {
       url: `/missions/${this.mission.id}`,
       tag: `mission-${this.mission.id}`,
     });
+    // F104: 끝난 뒤 회고 회의
+    await this.startMeeting("RETRO");
+  }
+
+  // ── F104 회의: 참여자가 한 바퀴 의견 → 리더 결론 ─────────────────────────────
+
+  /** 회의를 시작한다 (미션에서 껐거나, 이미 했거나, 리더 말고 참여자가 없으면 하지 않음). 시작했으면 true */
+  private async startMeeting(kind: MeetingKind): Promise<boolean> {
+    if (!this.mission.meetings) return false;
+    const [done] = await this.db
+      .select({ id: meetings.id })
+      .from(meetings)
+      .where(and(eq(meetings.missionId, this.mission.id), eq(meetings.kind, kind)))
+      .limit(1);
+    if (done) return false;
+    const team = await this.team();
+    const participants = [...new Set((await this.tasks()).map((t) => t.assigneeId))].filter(
+      (id): id is string => Boolean(id) && id !== this.leader.id && team.some((a) => a.id === id),
+    );
+    if (participants.length === 0) return false;
+
+    const label = MEETING_LABEL[kind];
+    const names = participants.map((id) => team.find((a) => a.id === id)!.name);
+    await this.db.transaction(async (tx) => {
+      const [meeting] = await tx.insert(meetings).values({ orgId: this.mission.orgId, missionId: this.mission.id, kind, participants }).returning({ id: meetings.id });
+      const payload: MissionMessagePayload = { kind: "MEETING", meetingId: meeting.id };
+      await tx.insert(messages).values({
+        orgId: this.mission.orgId,
+        missionId: this.mission.id,
+        senderType: "AGENT",
+        senderAgentId: this.leader.id,
+        receiverAgentId: participants[0],
+        type: "DIRECTIVE",
+        content: `${label}에서 의견을 말해 주세요.`,
+        payload,
+        priority: TASK_PRIORITY,
+      });
+      await writeAudit(tx, {
+        orgId: this.mission.orgId,
+        actorType: "AGENT",
+        actorId: this.leader.id,
+        action: "meeting.start",
+        targetType: "meeting",
+        targetId: meeting.id,
+        reasoning: `${label} 시작 — 참여: ${names.join(", ")}`,
+      });
+    });
+    await this.deps.enqueue({ orgId: this.mission.orgId, agentId: participants[0] });
+    await this.tellUser(`${label}를 시작합니다 (참여: ${names.join(" → ")}). 회의 탭에서 보고 답글을 달 수 있습니다.`);
+    return true;
+  }
+
+  /**
+   * 회의 결론. 킥오프면 결론을 이후 Task 지시에 넣고 계획 다음 단계로, 회고면 교훈을 참여자 모두의 장기 기억으로.
+   * 이미 결론이 있는 회의(사용자 답글 뒤 다시 정리)는 결론만 고친다.
+   */
+  async wrapMeeting(msg: Message) {
+    const meetingId = (msg.payload as MissionMessagePayload).meetingId;
+    const [meeting] = meetingId ? await this.db.select().from(meetings).where(eq(meetings.id, meetingId)) : [];
+    if (!meeting) {
+      await markRead(this.db, msg);
+      return;
+    }
+    const again = meeting.conclusion !== null;
+    const label = MEETING_LABEL[meeting.kind];
+    const ask =
+      meeting.kind === "KICKOFF"
+        ? "리더로서 회의를 정리하라. 합의한 진행 방향과 Task별로 주의할 점을 5줄 이내 목록(- )으로 적는다. 사용자 답글이 있으면 반드시 반영한다."
+        : `리더로서 회고를 정리하라. 잘된 점·아쉬운 점을 3~5줄 목록(- )으로 적고, 맨 끝에 '## ${RETRO_LESSON_HEADING}'을 두고 다음 미션에서 팀이 기억할 점을 1~3줄로 적는다. 사용자 답글이 있으면 반드시 반영한다.`;
+    const prompt = [await meetingTranscript(this.db, this.mission, meeting), again ? `# 이전 결론\n${meeting.conclusion}\n\n이후 달린 답글을 반영해 다시 정리하라.` : "", `# 할 일\n${ask}`]
+      .filter(Boolean)
+      .join("\n\n");
+    const r = await this.ask(`${label} 결론${again ? " 다시 정리" : ""}`, prompt, 1500);
+    const { body, items: lessons } = meeting.kind === "RETRO" ? extractSection(r.text.trim(), RETRO_LESSON_HEADING) : { body: r.text.trim(), items: [] };
+    const conclusion = body || "(결론 없음)";
+    const participants = (meeting.participants ?? []) as string[];
+    const source = `mission:${this.mission.id}:retro`;
+
+    await this.db.transaction(async (tx) => {
+      await tx.update(meetings).set({ status: "DONE", conclusion, updatedAt: new Date() }).where(eq(meetings.id, meeting.id));
+      await tx.insert(meetingTurns).values({ meetingId: meeting.id, speakerType: "AGENT", agentId: this.leader.id, content: `[결론${again ? " 수정" : ""}]\n${conclusion}` });
+      if (meeting.kind === "RETRO") {
+        const who = [this.leader.id, ...participants];
+        await clearMemoriesBySource(tx, who, source);
+        for (const agentId of who) await saveMemories(tx, { orgId: this.mission.orgId, agentId, scope: "LONG", missionId: this.mission.id, source, items: lessons });
+      }
+      await tx.update(messages).set({ readAt: new Date() }).where(eq(messages.id, msg.id));
+      await writeAudit(tx, {
+        orgId: this.mission.orgId,
+        actorType: "AGENT",
+        actorId: this.leader.id,
+        action: "meeting.conclude",
+        targetType: "meeting",
+        targetId: meeting.id,
+        reasoning: `${label} 결론${again ? " 다시 정리" : ""} (${r.model}, ${r.costKrw.toFixed(2)}원)${lessons.length ? ` — 기억할 점 ${lessons.length}개` : ""}`,
+      });
+    });
+    await this.tellUser(`${label} 결론${again ? "을 답글을 반영해 다시 정리했습니다" : ""}:\n${conclusion}`, { costKrw: Number(r.costKrw.toFixed(4)), model: r.model });
+    if (meeting.kind === "KICKOFF" && !again && this.mission.status === "RUNNING") await this.afterPlan(conclusion);
   }
 
   // ── 사용자 결정 반영 (승인함 F012 → 메시지로 전달) ─────────────────────────────
@@ -563,6 +677,12 @@ class Leader {
     const list = await this.tasks();
     if (list.length === 0) return this.plan(msg);
     await markRead(this.db, msg);
+    // F104: 처리 중인 메시지 없이 끊긴 회의는 결론 없이 닫는다. 킥오프였다면 계획 다음 단계부터
+    const cut = await this.closeInterruptedMeetings();
+    if (cut.includes("KICKOFF")) {
+      await this.tellUser("끊긴 킥오프 회의를 닫고 이어서 진행합니다.");
+      return this.afterPlan();
+    }
     const open = await this.db
       .select({ taskId: messages.taskId })
       .from(messages)
@@ -590,6 +710,33 @@ class Leader {
     const done = list.filter((t) => t.status === "DONE").length;
     await this.tellUser(`멈춘 미션을 이어서 진행합니다 (Task ${done}/${list.length} 완료${stuck.length ? `, 끊긴 Task ${stuck.length}개 다시 진행` : ""}).`);
     return this.advance();
+  }
+
+  private async closeInterruptedMeetings(): Promise<MeetingKind[]> {
+    const running = await this.db.select().from(meetings).where(and(eq(meetings.missionId, this.mission.id), eq(meetings.status, "RUNNING")));
+    const closed: MeetingKind[] = [];
+    for (const m of running) {
+      const [pending] = await this.db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(and(eq(messages.missionId, this.mission.id), isNull(messages.readAt), sql`${messages.payload}->>'meetingId' = ${m.id}`))
+        .limit(1);
+      if (pending) continue;
+      await this.db.transaction(async (tx) => {
+        await tx.update(meetings).set({ status: "DONE", conclusion: "(회의가 중간에 끊겨 결론 없이 마쳤습니다)", updatedAt: new Date() }).where(eq(meetings.id, m.id));
+        await writeAudit(tx, {
+          orgId: this.mission.orgId,
+          actorType: "AGENT",
+          actorId: this.leader.id,
+          action: "meeting.close",
+          targetType: "meeting",
+          targetId: m.id,
+          reasoning: `${MEETING_LABEL[m.kind]}가 끊겨 결론 없이 닫음`,
+        });
+      });
+      closed.push(m.kind);
+    }
+    return closed;
   }
 
   /** 미션 일시정지 (사용자가 거절한 질문의 결과). 미션 화면에서 재개하면 이어서 진행한다 */
@@ -677,19 +824,7 @@ class Leader {
   }
 
   private brief(): string {
-    const m = this.mission;
-    const criteria = ((m.successCriteria ?? []) as string[]).map((c) => `- ${c}`).join("\n");
-    return [
-      `# 미션: ${m.title}`,
-      `주제: ${m.topic}`,
-      m.goal ? `목표: ${m.goal}` : "",
-      criteria ? `성공 기준:\n${criteria}` : "",
-      `산출물 형식: ${m.outputFormat ?? "보고서"}`,
-      m.deadline ? `마감: ${m.deadline.toISOString().slice(0, 10)}` : "",
-      m.referenceNotes ? `참고 자료:\n${clip(m.referenceNotes, 4000)}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    return missionBrief(this.mission);
   }
 
   private async taskDirective(task: Task, feedback?: string): Promise<string> {
@@ -710,10 +845,16 @@ class Leader {
       .where(and(eq(messages.missionId, this.mission.id), eq(messages.senderType, "USER")))
       .orderBy(asc(messages.createdAt));
     const userNotes = notes.filter((n) => missionKind(n.payload) === "NOTE").slice(-10);
+    const [kickoff] = await this.db
+      .select({ conclusion: meetings.conclusion })
+      .from(meetings)
+      .where(and(eq(meetings.missionId, this.mission.id), eq(meetings.kind, "KICKOFF"), eq(meetings.status, "DONE")))
+      .limit(1);
 
     return [
       this.brief(),
       `# 내 Task (${list.findIndex((t) => t.id === task.id) + 1}/${list.length}): ${task.title}\n${task.description ?? ""}`,
+      kickoff?.conclusion && !kickoff.conclusion.startsWith("(") ? `# 킥오프 회의 결론 (팀 합의)\n${kickoff.conclusion}` : "",
       prev.length ? `# 앞 Task 결과 (참고해서 이어 작업)\n${prev.join("\n\n")}` : "",
       userNotes.length ? `# 사용자 추가 지시 (최우선)\n${userNotes.map((n) => `- ${n.content}`).join("\n")}` : "",
       feedback ? `# 다시 할 때 반영할 것\n${feedback}` : "",

@@ -52,3 +52,19 @@ export function preview(text: string): string {
 export function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}\n…(이하 생략)` : text;
 }
+
+/** 미션 개요 (리더 계획·검토·통합, 회의에서 함께 쓴다) */
+export function missionBrief(m: Mission): string {
+  const criteria = ((m.successCriteria ?? []) as string[]).map((c) => `- ${c}`).join("\n");
+  return [
+    `# 미션: ${m.title}`,
+    `주제: ${m.topic}`,
+    m.goal ? `목표: ${m.goal}` : "",
+    criteria ? `성공 기준:\n${criteria}` : "",
+    `산출물 형식: ${m.outputFormat ?? "보고서"}`,
+    m.deadline ? `마감: ${m.deadline.toISOString().slice(0, 10)}` : "",
+    m.referenceNotes ? `참고 자료:\n${clip(m.referenceNotes, 4000)}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}

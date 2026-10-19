@@ -36,6 +36,8 @@ export interface MissionSpec {
   autonomy?: Autonomy;
   priority?: number;
   referenceNotes?: string | null;
+  /** F104 킥오프·회고 회의 (없으면 한다) */
+  meetings?: boolean;
 }
 
 /** 지시 예약의 내용 (schedules.spec, kind=DIRECTIVE) */
@@ -152,6 +154,7 @@ export async function startMission(tx: AnyDb, input: StartMissionInput) {
       goal: input.goal ?? null,
       successCriteria: input.successCriteria ?? [],
       deadline: input.deadline ?? null,
+      meetings: input.meetings ?? true,
       budgetLimit,
       priority: [0, 1, 2].includes(input.priority ?? 0) ? (input.priority ?? 0) : 0,
       outputFormat: input.outputFormat ?? "보고서",

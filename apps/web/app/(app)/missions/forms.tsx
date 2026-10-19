@@ -3,7 +3,7 @@
 import { AUTONOMY_HELP, AUTONOMY_LABEL, type Autonomy, OUTPUT_FORMATS } from "@agentorg/shared/missions";
 import { useActionState, useRef } from "react";
 import { button, errorText, input } from "@/lib/ui";
-import { createMission, type FormState, sendMissionNote, updateMissionSettings } from "./actions";
+import { createMission, type FormState, replyMeeting, sendMissionNote, updateMissionSettings } from "./actions";
 
 function Message({ state }: { state: FormState }) {
   if (state?.error) return <p className={errorText}>{state.error}</p>;
@@ -70,6 +70,12 @@ export function MissionForm({ leaders, defaultAutonomy }: { leaders: { id: strin
           </label>
         ))}
       </fieldset>
+      <label className="flex min-h-11 items-center gap-3 rounded-lg border border-black/15 px-3 text-sm dark:border-white/15">
+        <input type="checkbox" name="meetings" defaultChecked={true} className="size-5" />
+        <span>
+          <b>회의</b> — 시작 전 킥오프·끝난 뒤 회고 (팀원마다 AI 호출 1번씩 더)
+        </span>
+      </label>
       <label className={label}>
         담당 리더
         <select name="leaderId" defaultValue="" className={select}>
@@ -93,7 +99,7 @@ export function MissionForm({ leaders, defaultAutonomy }: { leaders: { id: strin
   );
 }
 
-export function MissionSettingsForm({ id, autonomy, budgetLimit }: { id: string; autonomy: Autonomy; budgetLimit: number }) {
+export function MissionSettingsForm({ id, autonomy, budgetLimit, meetings }: { id: string; autonomy: Autonomy; budgetLimit: number; meetings: boolean }) {
   const [state, action, pending] = useActionState(updateMissionSettings, undefined);
   return (
     <form action={action} className="flex flex-col gap-3">
@@ -111,6 +117,12 @@ export function MissionSettingsForm({ id, autonomy, budgetLimit }: { id: string;
       <label className={label}>
         예산 한도 (원)
         <input name="budgetLimit" type="number" inputMode="numeric" min={0} max={1000000} defaultValue={budgetLimit} className={input} />
+      </label>
+      <label className="flex min-h-11 items-center gap-3 rounded-lg border border-black/15 px-3 text-sm dark:border-white/15">
+        <input type="checkbox" name="meetings" defaultChecked={meetings} className="size-5" />
+        <span>
+          <b>회의</b> — 시작 전 킥오프·끝난 뒤 회고 (팀원마다 AI 호출 1번씩 더)
+        </span>
       </label>
       <button type="submit" disabled={pending} className={button}>
         저장
@@ -147,6 +159,41 @@ export function NoteForm({ id, disabled }: { id: string; disabled?: boolean }) {
         />
         <button type="submit" disabled={pending || disabled} className={`${button} shrink-0`}>
           {pending ? "보내는 중" : "보내기"}
+        </button>
+      </div>
+      <Message state={state} />
+    </form>
+  );
+}
+
+/** F104 회의록 답글 — 진행 중이면 다음 발언·결론에, 끝난 회의면 리더가 결론을 다시 정리 */
+export function MeetingReplyForm({ missionId, meetingId, disabled }: { missionId: string; meetingId: string; disabled?: boolean }) {
+  const [state, action, pending] = useActionState(replyMeeting, undefined);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  return (
+    <form
+      action={async (fd) => {
+        await action(fd);
+        if (ref.current) ref.current.value = "";
+      }}
+      className="flex flex-col gap-1"
+    >
+      <input type="hidden" name="id" value={missionId} />
+      <input type="hidden" name="meetingId" value={meetingId} />
+      <div className="flex items-end gap-2">
+        <textarea
+          ref={ref}
+          name="content"
+          rows={2}
+          maxLength={2000}
+          required
+          disabled={disabled}
+          placeholder="회의에 의견 남기기 (예: 20대 위주로 봐 주세요)"
+          className={textarea}
+          aria-label="회의 답글"
+        />
+        <button type="submit" disabled={pending || disabled} className={`${button} shrink-0`}>
+          {pending ? "남기는 중" : "답글"}
         </button>
       </div>
       <Message state={state} />

@@ -131,7 +131,7 @@ describe("미션", () => {
   async function startMission(autonomy: Autonomy = "FULL", callLimit = 60) {
     const [mission] = await db
       .insert(schema.missions)
-      .values({ orgId: ctx.org.id, title: "트렌드", topic: "트렌드", autonomy, leaderId: ctx.agent.id, status: "RUNNING", budgetLimit: 5000, callLimit })
+      .values({ orgId: ctx.org.id, title: "트렌드", topic: "트렌드", autonomy, leaderId: ctx.agent.id, status: "RUNNING", budgetLimit: 5000, callLimit, meetings: false }) // 회의(F104)는 meetings.test.ts에서
       .returning();
     const payload: MissionMessagePayload = { kind: "MISSION_START" };
     await db.insert(schema.messages).values({ orgId: ctx.org.id, missionId: mission.id, senderType: "USER", receiverAgentId: ctx.agent.id, type: "DIRECTIVE", content: "시작", payload, priority: 100 });

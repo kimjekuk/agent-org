@@ -99,6 +99,7 @@ async function startMission(autonomy: Autonomy) {
       leaderId: leader.id,
       status: "RUNNING",
       budgetLimit: 5000,
+      meetings: false, // 회의(F104)는 meetings.test.ts에서
     })
     .returning();
   const payload: MissionMessagePayload = { kind: "MISSION_START" };

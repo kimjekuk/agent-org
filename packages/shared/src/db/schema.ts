@@ -104,6 +104,7 @@ export const missions = pgTable("missions", {
   scheduleId: uuid("schedule_id").references((): AnyPgColumn => schedules.id, { onDelete: "set null" }), // F106 반복·예약으로 만든 미션
   status: missionStatus("status").notNull().default("DRAFT"),
   callLimit: integer("call_limit").notNull().default(60), // F109 무한 반복 차단: 미션의 AI 호출 상한 (승인하면 늘어남)
+  meetings: boolean("meetings").notNull().default(true), // F104 킥오프·회고 회의를 할지
   createdAt: createdAt(),
 });
 
@@ -182,6 +183,32 @@ export const knowledgeDocs = pgTable(
   },
   (t) => [unique("knowledge_docs_source_key").on(t.orgId, t.sourceKey)],
 );
+
+// F104 회의: 미션 시작 전 킥오프, 끝난 뒤 회고. 참여자가 한 바퀴 돌며 의견 → 리더가 결론 (2026-10-19 결정)
+export const meetingKind = pgEnum("meeting_kind", ["KICKOFF", "RETRO"]);
+export const meetingStatus = pgEnum("meeting_status", ["RUNNING", "DONE"]);
+
+export const meetings = pgTable("meetings", {
+  id: id(),
+  orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  missionId: uuid("mission_id").notNull().references(() => missions.id, { onDelete: "cascade" }),
+  kind: meetingKind("kind").notNull(),
+  status: meetingStatus("status").notNull().default("RUNNING"),
+  /** 발언 순서 (에이전트 id). 리더는 마지막에 결론만 */
+  participants: jsonb("participants").$type<string[]>().notNull().default([]),
+  conclusion: text("conclusion"),
+  createdAt: createdAt(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const meetingTurns = pgTable("meeting_turns", {
+  id: id(),
+  meetingId: uuid("meeting_id").notNull().references(() => meetings.id, { onDelete: "cascade" }),
+  speakerType: actorType("speaker_type").notNull(), // AGENT = 참여자 의견, USER = 사용자 답글
+  agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  content: text("content").notNull(),
+  createdAt: createdAt(),
+});
 
 export const costLogs = pgTable("cost_logs", {
   id: id(),
