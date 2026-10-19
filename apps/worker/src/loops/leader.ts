@@ -18,6 +18,7 @@ import {
   type MissionMessagePayload,
   missionKind,
   needsCheckpoint,
+  SELF_CHECK_HEADING,
 } from "@agentorg/shared/missions";
 import { awardXp, masteredSkills, matchingSkills, XP } from "@agentorg/shared/growth";
 import { addArtifactToKnowledge, knowledgeContext } from "@agentorg/shared/knowledge";
@@ -39,7 +40,7 @@ const TASK_PRIORITY = 50; // 사용자 직접 지시(100)보다 낮게
 export function isLeaderWork(mission: Mission, agent: Agent, msg: Message): boolean {
   if (mission.leaderId !== agent.id) return false;
   const kind = missionKind(msg.payload);
-  if (kind && kind !== "TASK" && kind !== "MEETING") return true;
+  if (kind && kind !== "TASK" && kind !== "MEETING" && kind !== "QA_REVIEW") return true;
   return msg.type === "REPORT" && Boolean(msg.taskId);
 }
 
@@ -61,6 +62,7 @@ export async function handleLeaderMessage(db: Db, leader: Agent, mission: Missio
     else if (kind === "FINALIZE") await lead.finalize(msg);
     else if (kind === "RESUME") await lead.resume(msg);
     else if (kind === "MEETING_WRAP") await lead.wrapMeeting(msg);
+    else if (kind === "QA_RESULT") await lead.applyQa(msg);
     else if (kind === "TASK_MOVED") {
       await markRead(db, msg);
       await lead.advance();
@@ -101,6 +103,7 @@ const KIND_LABEL: Record<string, string> = {
   TASK_MOVED: "Task 이동 반영",
   RESUME: "멈춘 미션 이어서 진행",
   MEETING_WRAP: "회의 결론 정리",
+  QA_RESULT: "QA 검토 결과 반영",
   REPORT: "보고 검토",
 };
 
@@ -307,23 +310,102 @@ class Leader {
       return this.dispatch(task, `이전 시도가 실패했습니다 (${failCount}/${MAX_FAILS}): ${msg.content}`);
     }
 
+    // F107: QA 담당이 있으면 QA에게 검토를 맡긴다 (담당 본인·리더는 제외)
+    const qa = await this.qaReviewer(task);
+    if (qa) return this.requestQa(msg, task, qa);
+    return this.judge(msg, task);
+  }
+
+  /** 검토 요청 글 (리더 직접 검토·QA 검토 공용) */
+  private async reviewPrompt(task: Task): Promise<{ prompt: string; artifactId: string | null }> {
     const result = await this.taskResult(task);
     const prompt = [
       this.brief(),
       `# 검토할 Task\n${task.title}\n${task.description ?? ""}`,
       `# 담당의 결과\n${clip(result.text, 12000)}`,
-      "Task 설명과 미션의 성공 기준에 비추어 이 결과를 다음 단계로 넘겨도 되는지 검토하라. 사소한 흠은 통과시키고, 빠진 내용·틀린 사실처럼 고쳐야 할 것만 반려한다.",
+      result.selfCheck.length ? `# 담당의 자기검토\n${result.selfCheck.map((c) => `- ${c}`).join("\n")}` : "",
+      "Task 설명과 미션의 성공 기준에 비추어 이 결과를 다음 단계로 넘겨도 되는지 검토하라. 사소한 흠은 통과시키고, 빠진 내용·틀린 사실처럼 고쳐야 할 것만 반려한다. 자기검토에서 ⚠️로 적은 항목은 특히 확인한다.",
       '다른 말 없이 JSON만 답한다: {"pass": true 또는 false, "feedback": "반려면 구체적 수정 요청, 통과면 한 줄 평"}',
-    ].join("\n\n");
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    return { prompt, artifactId: result.artifactId };
+  }
+
+  /** 리더가 직접 검토 (QA가 없거나 QA가 검토하지 못했을 때) */
+  private async judge(msg: Message, task: Task) {
+    const { prompt } = await this.reviewPrompt(task);
     const r = await this.ask(`"${preview(task.title)}" 보고 검토`, prompt, 1500);
     const verdict = parseJsonObject<ReviewJson>(r.text);
     const feedback = (verdict?.feedback ?? "").trim() || (verdict ? "" : "(검토 결과를 읽지 못해 통과로 처리)");
-    const pass = verdict?.pass !== false;
+    return this.applyVerdict(msg, task, verdict?.pass !== false, feedback, { costKrw: r.costKrw, model: r.model });
+  }
 
+  /** F107 QA 담당: 품질 검토 권한이 있는 활성 에이전트 (리더·이 Task 담당 제외, 먼저 들어온 사람) */
+  private async qaReviewer(task: Task): Promise<Agent | undefined> {
+    const all = await this.db
+      .select()
+      .from(agents)
+      .where(and(eq(agents.orgId, this.mission.orgId), eq(agents.isActive, true)))
+      .orderBy(asc(agents.createdAt));
+    return all.find((a) => ((a.toolPermissions ?? {}) as ToolPermissions).qa_review && a.id !== this.leader.id && a.id !== task.assigneeId);
+  }
+
+  private async requestQa(msg: Message, task: Task, qa: Agent) {
+    const { prompt } = await this.reviewPrompt(task);
+    const payload: MissionMessagePayload = { kind: "QA_REVIEW" };
+    await this.db.transaction(async (tx) => {
+      await tx.insert(messages).values({
+        orgId: this.mission.orgId,
+        missionId: this.mission.id,
+        taskId: task.id,
+        senderType: "AGENT",
+        senderAgentId: this.leader.id,
+        receiverAgentId: qa.id,
+        type: "DIRECTIVE",
+        content: prompt,
+        payload,
+        priority: TASK_PRIORITY,
+      });
+      await tx.update(messages).set({ readAt: new Date() }).where(eq(messages.id, msg.id));
+      await writeAudit(tx, {
+        orgId: this.mission.orgId,
+        actorType: "AGENT",
+        actorId: this.leader.id,
+        action: "task.qa_request",
+        targetType: "task",
+        targetId: task.id,
+        reasoning: `"${task.title}" 결과 검토를 QA ${qa.name}에게 맡김`,
+      });
+    });
+    await this.deps.enqueue({ orgId: this.mission.orgId, agentId: qa.id });
+    await this.changed();
+  }
+
+  /** F107 QA 검토 결과 반영. QA가 검토하지 못했으면 리더가 직접 검토한다 */
+  async applyQa(msg: Message) {
+    const [task] = msg.taskId ? await this.db.select().from(tasks).where(eq(tasks.id, msg.taskId)) : [];
+    const p = (msg.payload ?? {}) as MissionMessagePayload;
+    if (!task || task.status !== "REVIEW") {
+      await markRead(this.db, msg);
+      return;
+    }
+    if (p.qaFailed) return this.judge(msg, task);
+    const [qa] = msg.senderAgentId ? await this.db.select({ name: agents.name }).from(agents).where(eq(agents.id, msg.senderAgentId)) : [];
+    return this.applyVerdict(msg, task, p.pass !== false, (p.feedback ?? "").trim(), { costKrw: p.costKrw ?? 0, model: p.model ?? "" }, qa?.name);
+  }
+
+  /**
+   * 검토 결과 반영: 반려(Task당 MAX_REJECTS번까지) → 다시 지시, 반려 한도를 넘었는데 또 미통과면 사용자에게 질문(F107),
+   * 통과 → 경험치 + (수동이면 결과 승인 요청) 다음 Task
+   */
+  private async applyVerdict(msg: Message, task: Task, pass: boolean, feedback: string, cost: { costKrw: number; model: string }, reviewer?: string) {
+    const by = reviewer ? `QA ${reviewer} ` : "";
+    const meta = cost.model ? { costKrw: cost.costKrw, model: cost.model } : {};
     if (!pass && task.rejectCount < MAX_REJECTS) {
       await this.db.transaction(async (tx) => {
         await tx.update(tasks).set({ rejectCount: task.rejectCount + 1 }).where(eq(tasks.id, task.id));
-        await this.note(tx, task, `반려: ${feedback}`, { costKrw: r.costKrw, model: r.model });
+        await this.note(tx, task, `${by}반려: ${feedback}`, { ...meta, review: "REJECT" });
         await tx.update(messages).set({ readAt: new Date() }).where(eq(messages.id, msg.id));
         await writeAudit(tx, {
           orgId: this.mission.orgId,
@@ -332,16 +414,41 @@ class Leader {
           action: "task.reject",
           targetType: "task",
           targetId: task.id,
-          reasoning: feedback,
+          reasoning: `${by}${feedback}`,
         });
       });
-      return this.dispatch(task, `리더 검토에서 반려되었습니다. 아래를 고쳐 다시 제출하세요.\n${feedback}`);
+      return this.dispatch(task, `${reviewer ? `QA ${reviewer}의 ` : "리더 "}검토에서 반려되었습니다. 아래를 고쳐 다시 제출하세요.\n${feedback}`);
     }
 
-    const forced = !pass ? ` (반려 한도 ${MAX_REJECTS}회를 넘어 통과 처리)` : "";
+    if (!pass) {
+      // F107: 반려 한도까지 고쳤는데도 미통과 → 억지로 통과시키지 않고 사용자에게 묻는다
+      await this.db.transaction(async (tx) => {
+        await this.note(tx, task, `${by}또 반려 (한도 ${MAX_REJECTS}회 초과): ${feedback}`, { ...meta, review: "REJECT" });
+        await tx.update(messages).set({ readAt: new Date() }).where(eq(messages.id, msg.id));
+        await writeAudit(tx, {
+          orgId: this.mission.orgId,
+          actorType: "AGENT",
+          actorId: this.leader.id,
+          action: "task.reject_limit",
+          targetType: "task",
+          targetId: task.id,
+          reasoning: `${by}반려 한도 ${MAX_REJECTS}회를 넘어 사용자에게 확인 요청: ${feedback}`,
+        });
+      });
+      const result = await this.taskResult(task);
+      await this.requestApproval(
+        "QUESTION",
+        undefined,
+        `"${task.title}"이(가) ${task.rejectCount + 1}번째 검토에서도 통과하지 못했습니다.\n마지막 검토 의견: ${feedback}\n\n승인 = 이대로 통과 / 거절 = 다시 하기 (코멘트를 적으면 담당에게 전달)`,
+        { reason: "REJECT_LIMIT", artifactId: result.artifactId },
+        task.id,
+      );
+      return;
+    }
+
     const checkpoint = needsCheckpoint(this.autonomy, "TASK");
     await this.db.transaction(async (tx) => {
-      await this.note(tx, task, `검토 통과${forced}: ${feedback || "좋습니다"}`, { costKrw: r.costKrw, model: r.model });
+      await this.note(tx, task, `${by}검토 통과: ${feedback || "좋습니다"}`, { ...meta, review: "PASS" });
       if (!checkpoint) await tx.update(tasks).set({ status: "DONE" }).where(eq(tasks.id, task.id));
       await tx.update(messages).set({ readAt: new Date() }).where(eq(messages.id, msg.id));
       await writeAudit(tx, {
@@ -351,16 +458,17 @@ class Leader {
         action: "task.review_pass",
         targetType: "task",
         targetId: task.id,
-        reasoning: `${feedback}${forced}`,
+        reasoning: `${by}${feedback}`,
       });
     });
-    // F102: 검토를 제대로 통과하면 담당에게 경험치 + 쓰인 특기 숙련
-    if (pass && task.assigneeId) {
+    // F102: 검토를 통과하면 담당에게 경험치 + 쓰인 특기 숙련
+    if (task.assigneeId) {
       const [assignee] = await this.db.select({ skills: agents.skills }).from(agents).where(eq(agents.id, task.assigneeId));
       const skills = matchingSkills((assignee?.skills ?? []) as string[], (task.requiredSkills ?? []) as string[]);
       await awardXp(this.db, { agentId: task.assigneeId, amount: XP.REVIEW_PASS, reason: `"${preview(task.title)}" 검토 통과`, skills });
     }
     if (checkpoint) {
+      const result = await this.taskResult(task);
       await this.requestApproval("CHECKPOINT", "TASK", `Task 결과 승인 요청 — "${task.title}"`, { artifactId: result.artifactId }, task.id);
     } else {
       await this.changed();
@@ -632,6 +740,20 @@ class Leader {
       await this.changed();
       return this.advance();
     }
+    if (ap.type === "QUESTION" && p.reason === "REJECT_LIMIT" && task) {
+      await markRead(this.db, msg);
+      if (!approved) {
+        // 다시 하기: 반려 횟수를 되돌려 검토가 한 번 더 반려할 수 있게
+        await this.db.update(tasks).set({ rejectCount: 0 }).where(eq(tasks.id, task.id));
+        return this.dispatch(task, `사용자가 다시 하라고 했습니다.${comment ? `\n사용자 의견 (최우선): ${comment}` : " 검토 의견을 반영해 고쳐 주세요."}`);
+      }
+      await this.db.transaction(async (tx) => {
+        await tx.update(tasks).set({ status: "DONE" }).where(eq(tasks.id, task.id));
+        await this.note(tx, task, "사용자 결정으로 이대로 통과합니다.", { review: "PASS" });
+      });
+      await this.changed();
+      return this.advance();
+    }
     if (ap.type === "QUESTION" && p.reason === "CALL_LIMIT") {
       await markRead(this.db, msg);
       if (!approved) return this.pauseMission("사용자가 AI 호출 상한에서 멈추기로 했습니다");
@@ -858,22 +980,38 @@ class Leader {
       prev.length ? `# 앞 Task 결과 (참고해서 이어 작업)\n${prev.join("\n\n")}` : "",
       userNotes.length ? `# 사용자 추가 지시 (최우선)\n${userNotes.map((n) => `- ${n.content}`).join("\n")}` : "",
       feedback ? `# 다시 할 때 반영할 것\n${feedback}` : "",
+      this.selfCheckGuide(task),
     ]
       .filter(Boolean)
       .join("\n\n");
   }
 
-  /** Task 결과: 가장 최근 산출물, 없으면 가장 최근 성공 보고 내용 */
-  private async taskResult(task: Task): Promise<{ text: string; artifactId: string | null }> {
-    const [art] = await this.db.select().from(artifacts).where(eq(artifacts.taskId, task.id)).orderBy(desc(artifacts.version)).limit(1);
-    if (art) return { text: art.content, artifactId: art.id };
+  /** F107 제출 전 자기검토: Task 설명·미션 성공 기준을 점검표로 주고 결과 끝에 스스로 체크하게 한다 (추가 AI 호출 없음) */
+  private selfCheckGuide(task: Task): string {
+    const items = [
+      `Task 요구를 모두 담았다: ${task.title}`,
+      ...((this.mission.successCriteria ?? []) as string[]).map((c) => `미션 성공 기준에 맞는다: ${c}`),
+      "사실·숫자는 근거(출처)가 있고, 모르는 것은 지어내지 않았다",
+    ];
+    return [
+      "# 제출 전 자기검토",
+      `결과를 다 쓴 뒤 스스로 아래 항목을 점검하고, 부족한 것은 제출 전에 고친다. 결과 끝에 '## ${SELF_CHECK_HEADING}'을 두고 항목마다 '- ✅ 항목' 또는 '- ⚠️ 항목: 부족한 점'으로 한 줄씩 적는다.`,
+      items.map((i) => `- ${i}`).join("\n"),
+    ].join("\n");
+  }
+
+  /** Task 결과: 가장 최근 산출물, 없으면 가장 최근 성공 보고 내용. 담당의 자기검토(F107)도 함께 */
+  private async taskResult(task: Task): Promise<{ text: string; artifactId: string | null; selfCheck: string[] }> {
     const reports = await this.db
       .select({ content: messages.content, payload: messages.payload })
       .from(messages)
       .where(and(eq(messages.taskId, task.id), eq(messages.type, "REPORT"), ne(messages.senderAgentId, this.leader.id)))
       .orderBy(desc(messages.createdAt));
     const ok = reports.find((r) => !(r.payload as { failed?: boolean } | null)?.failed);
-    return { text: ok?.content ?? "(결과 없음)", artifactId: null };
+    const selfCheck = ((ok?.payload as { selfCheck?: string[] } | null)?.selfCheck ?? []).slice(0, 10);
+    const [art] = await this.db.select().from(artifacts).where(eq(artifacts.taskId, task.id)).orderBy(desc(artifacts.version)).limit(1);
+    if (art) return { text: art.content, artifactId: art.id, selfCheck };
+    return { text: ok?.content ?? "(결과 없음)", artifactId: null, selfCheck };
   }
 
   private async finalArtifact() {

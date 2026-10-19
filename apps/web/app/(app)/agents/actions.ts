@@ -102,7 +102,11 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, 10);
-  const toolPermissions: ToolPermissions = { web_search: form.get("tool_web_search") === "on", document: form.get("tool_document") === "on" };
+  const toolPermissions: ToolPermissions = {
+    web_search: form.get("tool_web_search") === "on",
+    document: form.get("tool_document") === "on",
+    qa_review: form.get("tool_qa_review") === "on",
+  };
   const avatar = { hair: Number(form.get("hair")) % 4, face: Number(form.get("face")) % 4, color: Number(form.get("color")) % 6 };
 
   const changes = {

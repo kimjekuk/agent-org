@@ -32,6 +32,8 @@ export function decisionLabels(req: Pick<Approval, "type" | "payload">): { appro
   if (req.type === "CHECKPOINT" && p.stage === "TASK") return { approve: "결과 승인", reject: "다시 하기", help: "승인하면 다음 Task로 넘어갑니다. 거절하면 코멘트를 반영해 담당이 다시 합니다." };
   if (req.type === "CHECKPOINT" && p.stage === "FINAL") return { approve: "최종 승인", reject: "수정 요청", help: "승인하면 미션을 마칩니다. 거절하면 코멘트를 반영해 리더가 최종 결과를 고칩니다." };
   if (req.type === "QUESTION" && p.reason === "TASK_FAILED") return { approve: "다시 시도", reject: "건너뛰기", help: "승인하면 같은 담당이 다시 합니다 (코멘트는 안내로 전달). 거절하면 이 Task를 건너뛰고 다음으로 갑니다." };
+  if (req.type === "QUESTION" && p.reason === "REJECT_LIMIT")
+    return { approve: "이대로 통과", reject: "다시 하기", help: "검토에서 두 번 반려된 결과입니다. 승인하면 이대로 다음 Task로 넘어갑니다. 거절하면 코멘트를 담당에게 전달해 다시 합니다." };
   if (req.type === "QUESTION") return { approve: "다시 시도", reject: "그대로 두기", help: "승인하면 리더가 실패한 일을 다시 처리합니다." };
   if (req.type === "BUDGET")
     return { approve: "계속 진행", reject: "멈춤 유지", help: "한도를 늘리지 않고 계속하면 바로 다시 멈춥니다. 미션 화면의 '자율성 · 예산 변경' 또는 에이전트 프로필에서 먼저 한도를 늘려 주세요." };

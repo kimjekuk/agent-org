@@ -40,7 +40,7 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
   if (!mission) notFound();
   const db = getDb();
 
-  const [taskList, agentList, [spent], openApprovals, finals] = await Promise.all([
+  const [taskList, agentList, [spent], openApprovals, finals, reviewLog] = await Promise.all([
     db.select().from(schema.tasks).where(eq(schema.tasks.missionId, mission.id)).orderBy(asc(schema.tasks.order)),
     db.select().from(schema.agents).where(eq(schema.agents.orgId, org.id)),
     db.select({ total: sql<string>`coalesce(sum(${schema.costLogs.cost}), 0)`, calls: sql<number>`count(*)::int` }).from(schema.costLogs).where(eq(schema.costLogs.missionId, mission.id)),
@@ -55,7 +55,20 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
       .where(and(eq(schema.artifacts.missionId, mission.id), isNull(schema.artifacts.taskId)))
       .orderBy(desc(schema.artifacts.version))
       .limit(1),
+    // F107 Task별 품질 이력: 실패 보고 · 검토 반려/통과
+    db
+      .select({ taskId: schema.messages.taskId, content: schema.messages.content, payload: schema.messages.payload, createdAt: schema.messages.createdAt })
+      .from(schema.messages)
+      .where(
+        and(
+          eq(schema.messages.missionId, mission.id),
+          eq(schema.messages.type, "REPORT"),
+          sql`(${schema.messages.payload}->>'failed' = 'true' or ${schema.messages.payload} ? 'review')`,
+        ),
+      )
+      .orderBy(asc(schema.messages.createdAt)),
   ]);
+  const historyOf = (taskId: string) => reviewLog.filter((h) => h.taskId === taskId);
   const agentById = new Map(agentList.map((a) => [a.id, a]));
   const leader = mission.leaderId ? agentById.get(mission.leaderId) : undefined;
   const pct = progress(taskList);
@@ -205,6 +218,11 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
                         <summary className="flex cursor-pointer list-none items-center gap-2">
                           <AgentAvatar avatar={who?.avatar as Avatar | null} size={28} label={who?.name ?? "담당 없음"} />
                           <span className="min-w-0 flex-1 text-sm font-semibold">{t.title}</span>
+                          {(t.rejectCount > 0 || t.failCount > 0) && (
+                            <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-900/40 dark:text-red-100">
+                              {[t.rejectCount ? `반려 ${t.rejectCount}` : "", t.failCount ? `실패 ${t.failCount}` : ""].filter(Boolean).join(" · ")}
+                            </span>
+                          )}
                         </summary>
                         <div className="mt-2 flex flex-col gap-2 text-sm">
                           <p className="opacity-70">
@@ -213,6 +231,19 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
                             {t.failCount ? ` · 실패 ${t.failCount}회` : ""}
                           </p>
                           {t.description && <p className="whitespace-pre-wrap">{t.description}</p>}
+                          {historyOf(t.id).length > 0 && (
+                            <ol className="flex flex-col gap-1 border-l-2 border-black/10 pl-2 text-xs dark:border-white/15" aria-label="검토·실패 이력">
+                              {historyOf(t.id).map((h) => {
+                                const p = (h.payload ?? {}) as { failed?: boolean; review?: "PASS" | "REJECT" };
+                                const icon = p.failed ? "❌" : p.review === "REJECT" ? "↩️" : "✅";
+                                return (
+                                  <li key={`${h.createdAt.toISOString()}${h.content.slice(0, 8)}`} className="break-words">
+                                    {icon} <span className="opacity-60">{timeFmt.format(h.createdAt)}</span> {h.content.length > 160 ? `${h.content.slice(0, 160)}…` : h.content}
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          )}
                           {!closed && (
                             <div className="grid grid-cols-2 gap-2">
                               {(["TODO", "DONE"] as const)

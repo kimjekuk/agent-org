@@ -24,7 +24,7 @@ const MAX_ITEM = 300;
  * 마크다운에서 '## 제목' 섹션을 떼어 낸다. 남은 본문과 섹션의 항목(줄마다, 글머리표 제거)을 돌려준다.
  * 섹션은 다음 '## ' 제목이나 글 끝까지.
  */
-export function extractSection(markdown: string, heading: string): { body: string; items: string[] } {
+export function extractSection(markdown: string, heading: string, max = 5): { body: string; items: string[] } {
   const re = new RegExp(`^##\\s*${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "m");
   const m = re.exec(markdown);
   if (!m) return { body: markdown, items: [] };
@@ -37,7 +37,7 @@ export function extractSection(markdown: string, heading: string): { body: strin
     .split("\n")
     .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
     .filter((l) => l.length > 1 && !/^(없음|해당 없음|none)\.?$/i.test(l))
-    .slice(0, 5)
+    .slice(0, max)
     .map((l) => l.slice(0, MAX_ITEM));
   return { body: (markdown.slice(0, start).trimEnd() + (rest ? `\n\n${rest.trimStart()}` : "")).trim(), items };
 }

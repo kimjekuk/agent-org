@@ -174,12 +174,22 @@ describe("F007 리더 루프 — 완전 자율", () => {
     expect(await agentsWithPendingDirectives(db)).toHaveLength(0);
   });
 
-  it("리더 반려는 Task당 1번까지: 다시 낸 결과(버전 2)는 검토가 또 반려해도 통과시킨다", async () => {
+  it("리더 반려는 Task당 1번까지: 다시 낸 결과(버전 2)도 반려면 억지로 통과시키지 않고 사용자에게 묻는다 (F107)", async () => {
     reviewVerdict = () => ({ pass: false, feedback: "출처를 더 넣으세요" });
     const mission = await startMission("FULL");
     await drain();
 
-    const list = await missionTasks(mission.id);
+    const [q] = await approvals(mission.id);
+    expect(q).toMatchObject({ type: "QUESTION", payload: { reason: "REJECT_LIMIT" } });
+    let list = await missionTasks(mission.id);
+    expect(list.map((t) => t.status)).toEqual(["REVIEW", "TODO", "TODO"]);
+    // 승인 = 이대로 통과 → 나머지도 같은 질문을 거쳐 끝까지
+    for (let i = 0; i < 3; i++) {
+      const [open] = (await approvals(mission.id)).filter((a) => a.status === "PENDING");
+      await decide(open.id, "APPROVED");
+      await drain();
+    }
+    list = await missionTasks(mission.id);
     expect(list.every((t) => t.status === "DONE" && t.rejectCount === 1)).toBe(true);
     const research = await db.select().from(schema.artifacts).where(eq(schema.artifacts.taskId, list[0].id)).orderBy(asc(schema.artifacts.version));
     expect(research.map((a) => a.version)).toEqual([1, 2]);
