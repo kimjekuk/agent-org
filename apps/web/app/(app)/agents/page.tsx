@@ -72,7 +72,9 @@ export default async function AgentsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">{a.name}</span>
-                    <span className="text-xs opacity-60">{RANK_LABEL[a.rank]}</span>
+                    <span className="text-xs opacity-60">
+                      Lv.{a.level} · {RANK_LABEL[a.rank]}
+                    </span>
                     <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>
                   </div>
                   <p className="truncate text-sm opacity-70">{skills.join(", ") || "특기 없음"}</p>

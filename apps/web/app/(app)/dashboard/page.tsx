@@ -170,7 +170,9 @@ export default async function DashboardPage() {
                 <AgentAvatar avatar={a.avatar as Avatar | null} size={52} label={a.name} />
                 <div>
                   <p className="font-semibold">
-                    {a.name} <span className="text-xs font-normal opacity-60">{RANK_LABEL[a.rank]}</span>
+                    {a.name} <span className="text-xs font-normal opacity-60">
+                      Lv.{a.level} {RANK_LABEL[a.rank]}
+                    </span>
                   </p>
                   <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>
                 </div>

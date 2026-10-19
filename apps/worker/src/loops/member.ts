@@ -11,6 +11,7 @@ import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError, M
 import { DEFAULT_MODELS, supportsWebSearch } from "@agentorg/shared/llm/pricing";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
 import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
+import { awardXp, XP } from "@agentorg/shared/growth";
 import { knowledgeContext } from "@agentorg/shared/knowledge";
 import { extractSection, MEMO_HEADING, memoryContext, saveMemories } from "@agentorg/shared/memory";
 import { allowedAfterHours, isWithinWorkHours, parseWorkHours } from "@agentorg/shared/schedule";
@@ -217,6 +218,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
       });
     });
     await publish(job.orgId, { type: "message", agentId: agent.id });
+    await awardXp(db, { agentId: agent.id, amount: XP.WORK_DONE, reason: `지시 처리: ${preview(msg.content)}` }); // F102
     await notifySender(job, msg, deps);
     await setStatus(db, agent, "IDLE", "지시 처리 완료", publish);
     return undefined;

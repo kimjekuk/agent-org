@@ -75,6 +75,7 @@ export const agents = pgTable("agents", {
   skills: jsonb("skills").$type<string[]>().notNull().default([]),
   level: integer("level").notNull().default(1),
   xp: integer("xp").notNull().default(0),
+  skillXp: jsonb("skill_xp").$type<Record<string, number>>().notNull().default({}), // F102 특기별 끝낸 Task 수 (숙련 판단)
   modelPrimary: text("model_primary"),
   modelEconomy: text("model_economy"),
   maxTurns: integer("max_turns").notNull().default(20),

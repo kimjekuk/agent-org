@@ -2,7 +2,7 @@
 import { and, eq } from "drizzle-orm";
 import type { AnyDb } from "./db/client";
 import { writeAudit } from "./audit";
-import { approvalRequests, messages, missions } from "./db/schema";
+import { agents, approvalRequests, messages, missions } from "./db/schema";
 import type { MissionMessagePayload } from "./missions";
 
 export class ApprovalRequiredError extends Error {
@@ -95,6 +95,24 @@ export async function decideApproval(db: AnyDb, input: DecideInput): Promise<{ e
         reasoning: `승인 결정(${label})을 리더에게 전달`,
       });
       return { notify: { orgId: input.orgId, agentId: mission.leaderId } };
+    }
+    // F102 승진 제안: 승인하면 직급을 바꾼다
+    const kind = (req.payload as { kind?: string; toRank?: string } | null)?.kind;
+    if (kind === "PROMOTION" && req.agentId) {
+      if (input.decision === "APPROVED") {
+        const toRank = (req.payload as { toRank?: "MANAGER" | "LEADER" }).toRank ?? "MANAGER";
+        await tx.update(agents).set({ rank: toRank }).where(and(eq(agents.id, req.agentId), eq(agents.orgId, input.orgId)));
+        await writeAudit(tx, {
+          orgId: input.orgId,
+          actorType: "USER",
+          actorId: input.userId,
+          action: "agent.promote",
+          targetType: "agent",
+          targetId: req.agentId,
+          reasoning: `승진 제안 승인 → ${toRank === "LEADER" ? "리더" : "팀장"}`,
+        });
+      }
+      return { notify: null };
     }
     // 예산 초과 등: 승인하면 멈춘 에이전트가 남은 일을 다시 시도한다 (한도를 늘리지 않았으면 다시 멈춤)
     return { notify: input.decision === "APPROVED" && req.agentId ? { orgId: input.orgId, agentId: req.agentId } : null };
