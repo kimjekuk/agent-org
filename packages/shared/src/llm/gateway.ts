@@ -68,6 +68,8 @@ export interface GatewayCall {
   maxTokens?: number;
   /** 웹 검색 허용 횟수 (에이전트 도구 권한이 있을 때만 넘긴다) */
   webSearchMaxUses?: number;
+  /** F110 코드 실행 도구 (에이전트 도구 권한이 있을 때만 넘긴다) */
+  codeExecution?: boolean;
   /** 대체 모델을 쓰지 않는다 (설정 화면의 연결 테스트: 그 제공사가 되는지 확인해야 하므로) */
   noFallback?: boolean;
 }
@@ -79,6 +81,8 @@ export interface GatewayResult {
   costKrw: number;
   economyMode: boolean;
   webSearchRequests: number;
+  /** F110 실행된 코드 실행 횟수 */
+  codeExecutions: number;
   /** 장애로 대체 모델을 썼으면 원래 모델 (F109) */
   fallbackFrom?: string;
 }
@@ -172,6 +176,7 @@ export async function callLLM(db: AnyDb, call: GatewayCall, override?: LLMProvid
         outputTokens,
         costKrw: Number(cost.toFixed(4)),
         webSearchRequests: result.webSearchRequests,
+        codeExecutions: result.codeExecutions ?? 0,
         stopReason: result.stopReason,
       },
     });
@@ -184,6 +189,7 @@ export async function callLLM(db: AnyDb, call: GatewayCall, override?: LLMProvid
     costKrw: cost,
     economyMode,
     webSearchRequests: result.webSearchRequests,
+    codeExecutions: result.codeExecutions ?? 0,
     ...(fallbackFrom ? { fallbackFrom } : {}),
   };
 }
@@ -212,6 +218,7 @@ async function callModel(db: AnyDb, ownerId: string, call: GatewayCall, model: s
     messages: call.messages,
     maxTokens: call.maxTokens ?? 16000,
     webSearchMaxUses: call.webSearchMaxUses,
+    codeExecution: call.codeExecution,
   });
   return { result, resolved, provider };
 }

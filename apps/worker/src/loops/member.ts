@@ -8,7 +8,7 @@ import type { AnyDb } from "@agentorg/shared/db";
 import { agents, artifacts, messages, missions, organizations, tasks } from "@agentorg/shared/db/schema";
 import { publishOrgEvent } from "@agentorg/shared/events";
 import { BudgetExceededError, callLLM, EmergencyStopError, MissingApiKeyError, MissionCallLimitError } from "@agentorg/shared/llm/gateway";
-import { DEFAULT_MODELS, supportsWebSearch } from "@agentorg/shared/llm/pricing";
+import { DEFAULT_MODELS, supportsCodeExecution, supportsWebSearch } from "@agentorg/shared/llm/pricing";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
 import { enqueueAgentRun, type RunAgentJob } from "@agentorg/shared/queue";
 import { awardXp, XP } from "@agentorg/shared/growth";
@@ -140,6 +140,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
         system: systemPromptFor(agent, perms, await memoryContext(db, agent.id, msg.missionId), await knowledgeContext(db, job.orgId, msg.content.slice(0, 1000), msg.missionId), !msg.missionId),
         messages: [{ role: "user", content: msg.content }],
         webSearchMaxUses: perms.web_search ? WEB_SEARCH_MAX_USES : undefined,
+        codeExecution: Boolean(perms.code_exec), // F110
       },
       provider,
     );
@@ -203,6 +204,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
             model: r.model,
             costKrw: Number(r.costKrw.toFixed(4)),
             webSearchRequests: r.webSearchRequests,
+            ...(r.codeExecutions ? { codeExecutions: r.codeExecutions } : {}),
             economyMode: r.economyMode,
           },
         })
@@ -265,6 +267,8 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
 function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, knowledge: string, direct: boolean): string {
   // 웹 검색은 Claude 모델만 (2026-10-18 결정). 다른 회사 모델이면 권한이 있어도 검색 없이 진행한다
   const canSearch = perms.web_search && supportsWebSearch(agent.modelPrimary ?? DEFAULT_MODELS.primary);
+  // F110 코드 실행도 Claude Sonnet·Opus만. 다른 모델이면 권한이 있어도 실행 없이 진행
+  const canCode = perms.code_exec && supportsCodeExecution(agent.modelPrimary ?? DEFAULT_MODELS.primary);
   const skills = (agent.skills ?? []) as string[];
   const rules = [
     "지시를 처리해 결과물을 한국어 마크다운으로 작성한다. 첫 줄은 '# 제목'으로 시작한다.",
@@ -273,6 +277,7 @@ function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, k
     canSearch
       ? "필요하면 웹 검색으로 최신 정보를 확인한다."
       : "웹 검색 권한이 없다. 알고 있는 지식으로만 작성하고, 최신 정보가 필요하면 그렇다고 밝힌다.",
+    canCode ? "숫자 계산·표 만들기·데이터 정리는 코드 실행 도구(파이썬)로 확인한 값을 쓰고, 결과는 마크다운 표로 적는다. 코드는 결과물에 붙이지 않는다." : "",
     `맨 끝에 '## ${MEMO_HEADING}'을 두고, 다음에 비슷한 일을 할 때 도움이 될 점을 1~3줄로 적는다 (없으면 '없음').`,
     direct ? `그다음 ${PROPOSAL_GUIDE}` : "",
   ].filter(Boolean);
