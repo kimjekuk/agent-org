@@ -95,7 +95,7 @@ export default async function DashboardPage() {
               크게 보기
             </Link>
           </div>
-          <Office agents={office.agents} deskCount={office.deskCount} />
+          <Office agents={office.agents} deskCount={office.deskCount} theme={org.officeTheme} />
         </section>
       )}
 
@@ -195,7 +195,7 @@ export default async function DashboardPage() {
             const badge = statusBadge(a, isRestTime(org));
             return (
               <li key={a.id} className={`${card} flex flex-col items-center gap-2 p-3 text-center`}>
-                <AgentAvatar avatar={a.avatar as Avatar | null} size={52} label={a.name} />
+                <AgentAvatar avatar={a.avatar as Avatar | null} size={52} label={a.name} level={a.level} />
                 <div>
                   <p className="font-semibold">
                     {a.name} <span className="text-xs font-normal opacity-60">

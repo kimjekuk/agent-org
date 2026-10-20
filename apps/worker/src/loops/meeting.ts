@@ -1,6 +1,6 @@
 // F104 회의 — 참여자의 한 턴: 회의록을 보고 의견을 한 번 말한 뒤 다음 참여자에게, 마지막이면 리더에게 결론을 넘긴다.
 // 회의 시작·결론은 leader.ts가 한다. 턴은 runAgent → runTurn(guards)으로 실행된다 (CLAUDE.md 절대 규칙 1).
-import { personalityPrompt } from "@agentorg/shared/agents/personality";
+import { stylePrompt } from "@agentorg/shared/agents/personality";
 import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
 import { agents, artifacts, meetings, meetingTurns, messages, tasks } from "@agentorg/shared/db/schema";
@@ -75,7 +75,7 @@ export async function handleMeetingTurn(db: AnyDb, agent: Agent, mission: Missio
           name: agent.name,
           role: `팀원${skills.length ? ` (${skills.join(", ")})` : ""}`,
           personality: agent.personality,
-          style: personalityPrompt(agent.personalityType),
+          style: stylePrompt(agent),
           skills,
           instructions: "- 회의에서 내 차례에 3~5문장으로 짧게 말한다. 앞 사람 말을 되풀이하지 않고, 사용자 답글이 있으면 먼저 반영한다.\n- 제목·목록 없이 말하듯 쓴다. 모르는 것은 지어내지 않는다.",
         }),

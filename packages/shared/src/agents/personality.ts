@@ -42,3 +42,23 @@ export function isPersonalityType(v: unknown): v is PersonalityType {
 export function personalityPrompt(type: string | null | undefined): string {
   return isPersonalityType(type) ? `${PERSONALITY_TYPES[type].label}: ${PERSONALITY_TYPES[type].prompt}` : "";
 }
+
+// ── F202 말투 (2026-10-20 결정: 일하는 방식과 따로 고른다. 고르면 성격 유형의 말투보다 우선) ─────────
+
+export const SPEECH_TONES = {
+  POLITE: { label: "존댓말", example: "확인했습니다. 정리해 드릴게요.", prompt: "보고와 대화는 정중한 존댓말(~습니다, ~해요)로 한다." },
+  CASUAL: { label: "친근한 반말", example: "확인했어! 정리해 줄게.", prompt: "보고와 대화는 친한 동료에게 말하듯 편한 반말(~했어, ~할게)로 한다. 결과물(보고서 본문)은 평서문으로 쓴다." },
+  BRIEF: { label: "간결한 보고체", example: "확인함. 정리 완료.", prompt: "보고와 대화는 짧은 보고체(~함, ~임, ~완료)로 한다. 인사말과 군더더기는 뺀다." },
+} as const;
+
+export type SpeechTone = keyof typeof SPEECH_TONES;
+
+export function isSpeechTone(v: unknown): v is SpeechTone {
+  return typeof v === "string" && v in SPEECH_TONES;
+}
+
+/** 시스템 프롬프트의 '일하는 방식' = 성격 유형 + 말투 (말투를 고르면 성격 유형의 말투보다 우선) */
+export function stylePrompt(agent: { personalityType: string | null | undefined; speechTone?: string | null }): string {
+  const tone = isSpeechTone(agent.speechTone) ? `말투: ${SPEECH_TONES[agent.speechTone].prompt} (성격 유형의 말투보다 우선)` : "";
+  return [personalityPrompt(agent.personalityType), tone].filter(Boolean).join("\n");
+}

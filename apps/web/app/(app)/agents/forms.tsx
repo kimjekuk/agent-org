@@ -1,10 +1,25 @@
 "use client";
 
-import { PERSONALITY_TYPES, type PersonalityType } from "@agentorg/shared/agents/personality";
-import { COLOR_NAMES, FACE_NAMES, HAIR_NAMES, type ToolPermissions, TOOL_NAMES } from "@agentorg/shared/agents/templates";
-import { useActionState, useRef } from "react";
+import { PERSONALITY_TYPES, type PersonalityType, SPEECH_TONES, type SpeechTone } from "@agentorg/shared/agents/personality";
+import {
+  ACCESSORY_NAMES,
+  type Avatar,
+  COLOR_NAMES,
+  FACE_NAMES,
+  HAIR_COLORS,
+  HAIR_NAMES,
+  levelLook,
+  OUTFIT_NAMES,
+  SHIRT_COLORS,
+  SKIN_TONES,
+  type ToolPermissions,
+  TOOL_NAMES,
+} from "@agentorg/shared/agents/templates";
+import { useActionState, useRef, useState } from "react";
+import { AgentAvatar } from "@/components/AgentAvatar";
+import { PixelSprite } from "@/components/PixelSprite";
 import { button, errorText, input } from "@/lib/ui";
-import { type FormState, hireAgent, sendDirective, updateAgent } from "./actions";
+import { type FormState, hireAgent, saveAvatar, sendDirective, updateAgent } from "./actions";
 
 function Message({ state }: { state: FormState }) {
   if (state?.error) return <p className={errorText}>{state.error}</p>;
@@ -77,6 +92,7 @@ interface ProfileProps {
     rank: string;
     personality: string | null;
     personalityType: string | null;
+    speechTone: string | null;
     skills: string[];
     supervisorId: string | null;
     modelPrimary: string | null;
@@ -84,7 +100,6 @@ interface ProfileProps {
     maxTurns: number;
     budgetLimit: number | null;
     toolPermissions: ToolPermissions;
-    avatar: { hair: number; face: number; color: number };
   };
   supervisors: { id: string; name: string }[];
   models: readonly { id: string; label: string }[];
@@ -128,6 +143,17 @@ export function ProfileForm({ agent, supervisors, models }: ProfileProps) {
           {(Object.keys(PERSONALITY_TYPES) as PersonalityType[]).map((k) => (
             <option key={k} value={k}>
               {PERSONALITY_TYPES[k].emoji} {PERSONALITY_TYPES[k].label} — {PERSONALITY_TYPES[k].desc}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className={field}>
+        말투
+        <select name="speechTone" defaultValue={agent.speechTone ?? ""} className={select}>
+          <option value="">성격 유형대로</option>
+          {(Object.keys(SPEECH_TONES) as SpeechTone[]).map((k) => (
+            <option key={k} value={k}>
+              {SPEECH_TONES[k].label} — “{SPEECH_TONES[k].example}”
             </option>
           ))}
         </select>
@@ -184,31 +210,76 @@ export function ProfileForm({ agent, supervisors, models }: ProfileProps) {
         </label>
       </div>
 
-      <fieldset className="grid grid-cols-3 gap-2 text-sm">
-        <legend className="mb-1">캐릭터</legend>
-        {(
-          [
-            ["hair", "머리", HAIR_NAMES, agent.avatar.hair],
-            ["face", "표정", FACE_NAMES, agent.avatar.face],
-            ["color", "색", COLOR_NAMES, agent.avatar.color],
-          ] as const
-        ).map(([name, label, names, value]) => (
-          <label key={name} className={field}>
-            {label}
-            <select name={name} defaultValue={value} className={select}>
-              {names.map((n, i) => (
-                <option key={n} value={i}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-      </fieldset>
 
       <button type="submit" disabled={pending} className={button}>
         {pending ? "저장 중…" : "프로필 저장"}
       </button>
+      <Message state={state} />
+    </form>
+  );
+}
+
+// ── F202 캐릭터 꾸미기: 미리보기 + 버튼으로 고르기 (타이핑 없음) ─────────────────────
+
+type Part = keyof Required<Avatar>;
+const PARTS: { key: Part; label: string; options: readonly { name: string; swatch?: string }[] }[] = [
+  { key: "hair", label: "머리 모양", options: HAIR_NAMES.map((name) => ({ name })) },
+  { key: "hairColor", label: "머리색", options: HAIR_COLORS.map((c) => ({ name: c.name, swatch: c.hex })) },
+  { key: "skin", label: "피부색", options: SKIN_TONES.map((c) => ({ name: c.name, swatch: c.hex })) },
+  { key: "face", label: "표정", options: FACE_NAMES.map((name) => ({ name })) },
+  { key: "outfit", label: "옷", options: OUTFIT_NAMES.map((name) => ({ name })) },
+  { key: "color", label: "옷 색", options: COLOR_NAMES.map((name, i) => ({ name, swatch: SHIRT_COLORS[i] })) },
+  { key: "accessory", label: "액세서리", options: ACCESSORY_NAMES.map((name) => ({ name })) },
+];
+
+export function CharacterEditor({ agentId, avatar, level }: { agentId: string; avatar: Required<Avatar>; level: number }) {
+  const [state, action, pending] = useActionState(saveAvatar, undefined);
+  const [a, setA] = useState(avatar);
+  const look = levelLook(level);
+  const changed = PARTS.some((p) => a[p.key] !== avatar[p.key]);
+  return (
+    <form action={action} className="flex flex-col gap-3">
+      <input type="hidden" name="id" value={agentId} />
+      {PARTS.map((p) => (
+        <input key={p.key} type="hidden" name={p.key} value={a[p.key]} />
+      ))}
+      <div className="flex items-end justify-center gap-6 rounded-xl bg-black/5 p-3 dark:bg-white/10">
+        <AgentAvatar avatar={a} size={88} level={level} label="미리보기" />
+        <svg viewBox="-10 -24 20 26" width={66} height={86} shapeRendering="crispEdges" aria-label="사무실 캐릭터 미리보기" role="img">
+          <ellipse cx={0} cy={0} rx={5} ry={1.5} fill="#000" opacity={0.2} />
+          <PixelSprite avatar={a} />
+        </svg>
+      </div>
+      <p className="text-center text-xs opacity-70">
+        레벨 외형: {look.label ? `${look.badge} ${look.label} (Lv.${level})` : "Lv.3 별 · Lv.5 은메달 · Lv.7 금메달 · Lv.10 왕관"}
+      </p>
+      {PARTS.map((p) => (
+        <fieldset key={p.key} className="flex flex-col gap-1">
+          <legend className="mb-1 text-sm font-semibold">{p.label}</legend>
+          <div className="flex flex-wrap gap-2">
+            {p.options.map((o, i) => (
+              <button
+                key={o.name}
+                type="button"
+                onClick={() => setA({ ...a, [p.key]: i })}
+                aria-pressed={a[p.key] === i}
+                className={`flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold ${a[p.key] === i ? "bg-foreground text-background" : "bg-black/5 dark:bg-white/10"}`}
+              >
+                {o.swatch && <span className="inline-block h-4 w-4 rounded-full border border-black/20" style={{ background: o.swatch }} aria-hidden />}
+                {o.name}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      ))}
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => setA(avatar)} disabled={!changed} className="h-11 rounded-lg bg-black/5 text-sm font-semibold disabled:opacity-40 dark:bg-white/10">
+          되돌리기
+        </button>
+        <button type="submit" disabled={pending || !changed} className={button}>
+          {pending ? "저장 중…" : "캐릭터 저장"}
+        </button>
+      </div>
       <Message state={state} />
     </form>
   );

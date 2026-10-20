@@ -10,16 +10,15 @@ import {
   OFFICE_W,
   ROOMS,
 } from "@agentorg/shared/office";
+import { levelLook, officeTheme } from "@agentorg/shared/agents/templates";
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { type FormState, sendDirective } from "@/app/(app)/agents/actions";
 import { AgentAvatar } from "@/components/AgentAvatar";
+import { PixelSprite } from "@/components/PixelSprite";
 import type { OfficeAgent } from "@/lib/office";
 import { button, errorText, input } from "@/lib/ui";
 
-const SHIRT = ["#F2B33D", "#EC6FA9", "#3FA7E0", "#4DBF6B", "#9B7BE0", "#F08A3C"];
-const HAIR = "#3F3A36";
-const SKIN = "#FFE0C2";
 
 const CSS = `
 .office-agent { transition: transform 1.6s ease-in-out; cursor: pointer; }
@@ -38,7 +37,8 @@ const CSS = `
   .office-agent { transition: none } .office-typing .office-arms, .office-dot, .office-alert, .office-idle { animation: none }
 }`;
 
-export function Office({ agents, deskCount, full = false }: { agents: OfficeAgent[]; deskCount: number; full?: boolean }) {
+export function Office({ agents, deskCount, full = false, theme }: { agents: OfficeAgent[]; deskCount: number; full?: boolean; theme?: string | null }) {
+  const t = officeTheme(theme);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const selected = agents.find((a) => a.id === selectedId) ?? null;
@@ -71,14 +71,14 @@ export function Office({ agents, deskCount, full = false }: { agents: OfficeAgen
           aria-label={`사무실: ${agents.map((a) => `${a.name} ${a.badge.label}`).join(", ") || "에이전트 없음"}`}
         >
           <style>{CSS}</style>
-          <Floor />
-          <LeaderRoom working={leaderWorking} />
-          <MeetingRoom />
-          <Pantry />
+          <Floor t={t} />
+          <LeaderRoom working={leaderWorking} t={t} />
+          <MeetingRoom t={t} />
+          <Pantry t={t} />
           {Array.from({ length: Math.max(deskCount, 1) }, (_, i) => (
             <Desk key={i} index={i} on={workingDesks.has(i)} empty={i >= deskCount} />
           ))}
-          <Lounge />
+          <Lounge t={t} />
           {agents.map((a) => (
             <Character key={a.id} agent={a} selected={a.id === selectedId} onSelect={() => setSelectedId(a.id)} />
           ))}
@@ -91,22 +91,24 @@ export function Office({ agents, deskCount, full = false }: { agents: OfficeAgen
 
 // ── 바닥·방 ─────────────────────────────────────────────
 
-function Floor() {
+type Theme = ReturnType<typeof officeTheme>;
+
+function Floor({ t }: { t: Theme }) {
   return (
     <g>
-      <rect x={0} y={0} width={OFFICE_W} height={OFFICE_H} fill="#4B3B33" />
+      <rect x={0} y={0} width={OFFICE_W} height={OFFICE_H} fill={t.frame} />
       {/* 나무 바닥 */}
-      <rect x={4} y={4} width={OFFICE_W - 8} height={OFFICE_H - 8} fill="#E7CFA6" />
+      <rect x={4} y={4} width={OFFICE_W - 8} height={OFFICE_H - 8} fill={t.floor} />
       {Array.from({ length: 31 }, (_, i) => (
-        <rect key={i} x={4} y={10 + i * 8} width={OFFICE_W - 8} height={1} fill="#D9BD8F" />
+        <rect key={i} x={4} y={10 + i * 8} width={OFFICE_W - 8} height={1} fill={t.plank} />
       ))}
       {/* 벽 사이 칸막이 */}
-      <rect x={96} y={4} width={4} height={84} fill="#6B5A4E" />
-      <rect x={216} y={4} width={4} height={84} fill="#6B5A4E" />
-      <rect x={4} y={88} width={312} height={4} fill="#6B5A4E" />
+      <rect x={96} y={4} width={4} height={84} fill={t.wall} />
+      <rect x={216} y={4} width={4} height={84} fill={t.wall} />
+      <rect x={4} y={88} width={312} height={4} fill={t.wall} />
       {/* 문 (칸막이 아래쪽 틈) */}
-      <rect x={140} y={88} width={24} height={4} fill="#E7CFA6" />
-      <rect x={252} y={88} width={24} height={4} fill="#E7CFA6" />
+      <rect x={140} y={88} width={24} height={4} fill={t.floor} />
+      <rect x={252} y={88} width={24} height={4} fill={t.floor} />
       {/* 창문 */}
       {[16, 120, 236].map((x) => (
         <g key={x}>
@@ -118,11 +120,11 @@ function Floor() {
   );
 }
 
-function LeaderRoom({ working }: { working: boolean }) {
+function LeaderRoom({ working, t }: { working: boolean; t: Theme }) {
   const r = ROOMS.leader;
   return (
     <g>
-      <rect x={r.x} y={r.y} width={r.w - 4} height={r.h} fill="#F1E3C7" />
+      <rect x={r.x} y={r.y} width={r.w - 4} height={r.h} fill={t.leader} />
       {/* 유리 칸막이 */}
       <rect x={r.x + r.w - 6} y={r.y} width={2} height={r.h - 24} fill="#9BD3F5" opacity={0.9} />
       <rect x={r.x} y={r.y + r.h - 2} width={r.w - 30} height={2} fill="#9BD3F5" opacity={0.9} />
@@ -141,18 +143,18 @@ function LeaderRoom({ working }: { working: boolean }) {
       {["#BA68C8", "#4DB6AC", "#FF8A65"].map((c, i) => (
         <rect key={c} x={9 + i * 4} y={19} width={3} height={7} fill={c} />
       ))}
-      <text x={78} y={14} fontSize={6} textAnchor="middle" fill="#6B5A4E">
+      <text x={78} y={14} fontSize={6} textAnchor="middle" fill={t.text}>
         리더
       </text>
     </g>
   );
 }
 
-function MeetingRoom() {
-  const t = MEETING_TABLE;
+function MeetingRoom({ t }: { t: Theme }) {
+  const tb = MEETING_TABLE;
   return (
     <g>
-      <rect x={100} y={4} width={116} height={84} fill="#E9EEF2" />
+      <rect x={100} y={4} width={116} height={84} fill={t.meeting} />
       {/* 화이트보드·시계 */}
       <rect x={140} y={6} width={40} height={9} fill="#FFFFFF" stroke="#9CA3AF" strokeWidth={1} />
       <rect x={144} y={9} width={16} height={1} fill="#3B82F6" />
@@ -161,21 +163,21 @@ function MeetingRoom() {
       <rect x={196} y={9} width={1} height={3} fill="#111827" />
       <rect x={196} y={12} width={3} height={1} fill="#111827" />
       {/* 회의 테이블 */}
-      <rect x={t.x} y={t.y} width={t.w} height={t.h} rx={4} fill="#8B5E3C" />
-      <rect x={t.x + 2} y={t.y + 2} width={t.w - 4} height={2} fill="#A87650" />
-      <rect x={t.x + 10} y={t.y + 8} width={8} height={6} fill="#F5F5F4" />
-      <rect x={t.x + 40} y={t.y + 9} width={6} height={4} fill="#93C5FD" />
-      <text x={110} y={14} fontSize={6} fill="#6B7280">
+      <rect x={tb.x} y={tb.y} width={tb.w} height={tb.h} rx={4} fill="#8B5E3C" />
+      <rect x={tb.x + 2} y={tb.y + 2} width={tb.w - 4} height={2} fill="#A87650" />
+      <rect x={tb.x + 10} y={tb.y + 8} width={8} height={6} fill="#F5F5F4" />
+      <rect x={tb.x + 40} y={tb.y + 9} width={6} height={4} fill="#93C5FD" />
+      <text x={110} y={14} fontSize={6} fill={t.text}>
         회의실
       </text>
     </g>
   );
 }
 
-function Pantry() {
+function Pantry({ t }: { t: Theme }) {
   return (
     <g>
-      <rect x={220} y={4} width={96} height={84} fill="#EDE7DD" />
+      <rect x={220} y={4} width={96} height={84} fill={t.pantry} />
       {/* 조리대 */}
       <rect x={224} y={10} width={88} height={14} fill="#B0A090" />
       <rect x={224} y={24} width={88} height={2} fill="#8C7B6B" />
@@ -195,7 +197,7 @@ function Pantry() {
       <rect x={228} y={54} width={6} height={6} fill="#6B7280" />
       <rect x={262} y={54} width={6} height={6} fill="#6B7280" />
       <Plant x={300} y={70} />
-      <text x={268} y={86} fontSize={6} textAnchor="middle" fill="#6B5A4E">
+      <text x={268} y={86} fontSize={6} textAnchor="middle" fill={t.text}>
         탕비실
       </text>
     </g>
@@ -228,11 +230,11 @@ function Monitor({ x, y, on }: { x: number; y: number; on: boolean }) {
   );
 }
 
-function Lounge() {
+function Lounge({ t }: { t: Theme }) {
   return (
     <g>
       {/* 러그 */}
-      <rect x={104} y={214} width={128} height={38} fill="#C7D2FE" opacity={0.7} />
+      <rect x={104} y={214} width={128} height={38} fill={t.rug} opacity={0.7} />
       {/* 소파 */}
       <rect x={18} y={218} width={80} height={10} fill="#5E8C61" />
       <rect x={18} y={226} width={80} height={10} fill="#76A879" />
@@ -254,7 +256,7 @@ function Lounge() {
       ))}
       <Plant x={240} y={236} />
       <Plant x={6} y={238} />
-      <text x={60} y={250} fontSize={6} textAnchor="middle" fill="#6B5A4E">
+      <text x={60} y={250} fontSize={6} textAnchor="middle" fill={t.text}>
         휴게 공간
       </text>
     </g>
@@ -275,9 +277,7 @@ function Plant({ x, y }: { x: number; y: number }) {
 
 function Character({ agent, selected, onSelect }: { agent: OfficeAgent; selected: boolean; onSelect: () => void }) {
   const { x, y } = agent.place.at;
-  const shirt = SHIRT[(agent.avatar?.color ?? 0) % SHIRT.length];
-  const hair = agent.avatar?.hair ?? 0;
-  const face = agent.avatar?.face ?? 0;
+  const look = levelLook(agent.level);
   const typing = agent.status === "WORKING" && agent.activity === "WORK";
   const tagW = Math.max(18, agent.name.length * 6 + 6);
 
@@ -300,46 +300,7 @@ function Character({ agent, selected, onSelect }: { agent: OfficeAgent; selected
       <rect x={-10} y={-30} width={20} height={32} fill="transparent" />
       <g className={agent.status === "IDLE" ? "office-idle" : undefined}>
         <ellipse cx={0} cy={0} rx={5} ry={1.5} fill="#000" opacity={0.2} />
-        <g transform="translate(-6,-17)">
-          {/* 다리 */}
-          <rect x={3} y={13} width={2} height={3} fill="#374151" />
-          <rect x={7} y={13} width={2} height={3} fill="#374151" />
-          {/* 몸 */}
-          <rect x={2} y={8} width={8} height={6} fill={shirt} />
-          <g className="office-arms">
-            <rect x={1} y={9} width={1} height={4} fill={shirt} />
-            <rect x={10} y={9} width={1} height={4} fill={shirt} />
-            <rect x={1} y={13} width={1} height={1} fill={SKIN} />
-            <rect x={10} y={13} width={1} height={1} fill={SKIN} />
-          </g>
-          {/* 얼굴 */}
-          <rect x={3} y={2} width={6} height={6} fill={SKIN} />
-          <rect x={4} y={4} width={1} height={1} fill="#3F3A36" />
-          {face === 3 ? <rect x={7} y={4} width={1} height={1} fill={SKIN} /> : <rect x={7} y={4} width={1} height={1} fill="#3F3A36" />}
-          {face === 3 && <rect x={6} y={4} width={2} height={1} fill="#3F3A36" />}
-          <rect x={5} y={6} width={face === 1 ? 2 : 2} height={1} fill={face === 2 ? "#3F3A36" : "#E08A7A"} />
-          {/* 머리 */}
-          {hair === 0 && (
-            <>
-              <rect x={3} y={1} width={6} height={2} fill={HAIR} />
-              <rect x={2} y={2} width={1} height={4} fill={HAIR} />
-              <rect x={9} y={2} width={1} height={4} fill={HAIR} />
-            </>
-          )}
-          {hair === 1 && <rect x={2} y={0} width={8} height={3} fill={HAIR} />}
-          {hair === 2 && (
-            <>
-              <rect x={3} y={1} width={6} height={2} fill={HAIR} />
-              <rect x={5} y={-1} width={2} height={2} fill={HAIR} />
-            </>
-          )}
-          {hair === 3 && (
-            <>
-              <rect x={2} y={0} width={8} height={2} fill="#1F2937" />
-              <rect x={1} y={2} width={10} height={1} fill="#1F2937" />
-            </>
-          )}
-        </g>
+        <PixelSprite avatar={agent.avatar} />
       </g>
       <StatusBubble agent={agent} />
       {/* 이름표 */}
@@ -348,6 +309,11 @@ function Character({ agent, selected, onSelect }: { agent: OfficeAgent; selected
         <text x={0} y={-22} fontSize={5} textAnchor="middle" fill={selected ? "#FFFFFF" : "#111827"} fontWeight={700}>
           {agent.name}
         </text>
+        {look.badge && (
+          <text x={-tagW / 2 - 1} y={-21.5} fontSize={5} textAnchor="end">
+            {look.badge}
+          </text>
+        )}
       </g>
     </g>
   );

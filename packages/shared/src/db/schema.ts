@@ -60,6 +60,7 @@ export const organizations = pgTable("organizations", {
   budgetDaily: integer("budget_daily").notNull().default(2000), // 2026-10-18 결정: Max 5x 월 API 크레딧 안 (PRD 11장 초기값 20,000원에서 변경)
   workHours: jsonb("work_hours"),
   fallbackModel: text("fallback_model"), // F109 API 장애 시 대체 모델 (없으면 대체 없이 실패 처리)
+  officeTheme: text("office_theme").notNull().default("DEFAULT"), // F202 사무실 테마 (DEFAULT·MODERN·FOREST·NIGHT)
   createdAt: createdAt(),
 });
 
@@ -70,6 +71,7 @@ export const agents = pgTable("agents", {
   avatar: jsonb("avatar"),
   personality: text("personality"),
   personalityType: text("personality_type"), // F103 성격 유형 (agents/personality.ts)
+  speechTone: text("speech_tone"), // F202 말투 (agents/personality.ts SPEECH_TONES, 없으면 성격 유형의 말투)
   rank: agentRank("rank").notNull().default("MEMBER"),
   supervisorId: uuid("supervisor_id").references((): AnyPgColumn => agents.id, { onDelete: "set null" }),
   skills: jsonb("skills").$type<string[]>().notNull().default([]),
