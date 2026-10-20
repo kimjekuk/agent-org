@@ -29,7 +29,7 @@ export default async function OfficePage() {
           </Link>
         </p>
       ) : (
-        <Office agents={agents} deskCount={deskCount} full />
+        <Office agents={agents} deskCount={deskCount} full theme={org.officeTheme} />
       )}
       <p className="text-xs opacity-60">작업 중 = 자기 책상 · 회의·검토 = 회의실 · 대기 = 휴게 공간 · ❗ 막힘 · ⏸ 멈춤 · 💤 근무 시간 밖</p>
     </main>

@@ -2,15 +2,76 @@
 import { DEFAULT_MODELS } from "../llm/pricing";
 import type { PersonalityType } from "./personality";
 
-/** 캐릭터 파츠 (PRD 2장): 머리 4 × 표정 4 × 색 6 */
+/** 캐릭터 파츠 (PRD 2장 + F202 꾸미기). F202에서 늘어난 항목은 없으면 기본값 */
 export interface Avatar {
-  hair: number; // 0 단발 · 1 곱슬 · 2 묶음 · 3 모자
-  face: number; // 0 웃음 · 1 진지 · 2 놀람 · 3 윙크
-  color: number; // 0~5
+  hair: number; // HAIR_NAMES
+  face: number; // FACE_NAMES
+  color: number; // 옷 색 COLOR_NAMES
+  hairColor?: number; // HAIR_COLORS
+  skin?: number; // SKIN_TONES
+  outfit?: number; // OUTFIT_NAMES
+  accessory?: number; // ACCESSORY_NAMES
 }
-export const HAIR_NAMES = ["단발", "곱슬", "묶음", "모자"] as const;
+export const HAIR_NAMES = ["단발", "곱슬", "묶음", "모자", "긴머리", "짧은 머리"] as const;
 export const FACE_NAMES = ["웃음", "진지", "놀람", "윙크"] as const;
 export const COLOR_NAMES = ["노랑", "분홍", "하늘", "연두", "보라", "주황"] as const;
+/** 옷 색 (COLOR_NAMES 순서) */
+export const SHIRT_COLORS = ["#F2B33D", "#EC6FA9", "#3FA7E0", "#4DBF6B", "#9B7BE0", "#F08A3C"] as const;
+export const HAIR_COLORS = [
+  { name: "검정", hex: "#3F3A36" },
+  { name: "갈색", hex: "#7B4A2A" },
+  { name: "금발", hex: "#E3B54A" },
+  { name: "빨강", hex: "#B9472E" },
+  { name: "파랑", hex: "#3B5BA9" },
+  { name: "회색", hex: "#9CA3AF" },
+] as const;
+export const SKIN_TONES = [
+  { name: "밝은", hex: "#FFE0C2" },
+  { name: "중간", hex: "#F1C29A" },
+  { name: "구릿빛", hex: "#C98E62" },
+  { name: "짙은", hex: "#8D5A3B" },
+] as const;
+export const OUTFIT_NAMES = ["티셔츠", "셔츠·넥타이", "후드", "정장"] as const;
+export const ACCESSORY_NAMES = ["없음", "안경", "헤드셋", "리본", "꽃"] as const;
+
+/** 저장된 값(옛 3항목 포함)을 범위 안의 값으로 맞춘다 */
+export function normalizeAvatar(raw: unknown): Required<Avatar> {
+  const a = (raw ?? {}) as Partial<Record<keyof Avatar, unknown>>;
+  const pick = (v: unknown, n: number) => {
+    const x = Number(v);
+    return Number.isInteger(x) && x >= 0 && x < n ? x : 0;
+  };
+  return {
+    hair: pick(a.hair, HAIR_NAMES.length),
+    face: pick(a.face, FACE_NAMES.length),
+    color: pick(a.color, COLOR_NAMES.length),
+    hairColor: pick(a.hairColor, HAIR_COLORS.length),
+    skin: pick(a.skin, SKIN_TONES.length),
+    outfit: pick(a.outfit, OUTFIT_NAMES.length),
+    accessory: pick(a.accessory, ACCESSORY_NAMES.length),
+  };
+}
+
+/** F202 레벨별 외형: 3 별 · 5 은메달 · 7 금메달 · 10 왕관 (레벨로 자동, 저장하지 않음) */
+export function levelLook(level: number): { badge: string | null; ring: string | null; label: string | null } {
+  if (level >= 10) return { badge: "👑", ring: "#F59E0B", label: "왕관" };
+  if (level >= 7) return { badge: "🥇", ring: "#EAB308", label: "금메달" };
+  if (level >= 5) return { badge: "🥈", ring: "#94A3B8", label: "은메달" };
+  if (level >= 3) return { badge: "⭐", ring: null, label: "별" };
+  return { badge: null, ring: null, label: null };
+}
+
+/** F202 사무실 테마 (조직 설정) */
+export const OFFICE_THEMES = {
+  DEFAULT: { label: "기본 (나무)", floor: "#E7CFA6", plank: "#D9BD8F", wall: "#6B5A4E", frame: "#4B3B33", meeting: "#E9EEF2", leader: "#F1E3C7", pantry: "#EDE7DD", rug: "#C7D2FE", text: "#6B5A4E" },
+  MODERN: { label: "모던 (회색)", floor: "#E5E7EB", plank: "#D1D5DB", wall: "#4B5563", frame: "#1F2937", meeting: "#F3F4F6", leader: "#F9FAFB", pantry: "#E5E7EB", rug: "#BFDBFE", text: "#4B5563" },
+  FOREST: { label: "숲 (초록)", floor: "#D9E8C4", plank: "#C5DAA9", wall: "#4D6B3C", frame: "#2F4426", meeting: "#E8F3E1", leader: "#EEF5E6", pantry: "#E3EDD8", rug: "#FDE68A", text: "#3F5A31" },
+  NIGHT: { label: "밤 (어두운)", floor: "#3A3F58", plank: "#333850", wall: "#1E2235", frame: "#11131F", meeting: "#4A5070", leader: "#454B68", pantry: "#40465F", rug: "#4C3D7A", text: "#C7CBE0" },
+} as const;
+export type OfficeTheme = keyof typeof OFFICE_THEMES;
+export function officeTheme(key: string | null | undefined) {
+  return OFFICE_THEMES[(key && key in OFFICE_THEMES ? key : "DEFAULT") as OfficeTheme];
+}
 
 /** 도구 권한 (PRD F005: 기본 OFF). 웹 검색 · 문서 작성 · F107 품질 검토 담당(QA) */
 export type ToolPermissions = {

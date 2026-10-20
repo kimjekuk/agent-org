@@ -68,7 +68,7 @@ export default async function AgentsPage() {
           return (
             <li key={a.id}>
               <Link href={`/agents/${a.id}`} className={`${card} flex items-center gap-3 hover:bg-black/5 dark:hover:bg-white/5`}>
-                <AgentAvatar avatar={a.avatar as never} size={52} label={a.name} />
+                <AgentAvatar avatar={a.avatar as never} size={52} label={a.name} level={a.level} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">{a.name}</span>

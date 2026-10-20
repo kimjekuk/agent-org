@@ -35,7 +35,7 @@ export default async function OrgPage() {
       <li className="flex flex-col gap-2">
         <details className="rounded-xl border border-black/10 bg-background dark:border-white/15">
           <summary className="flex cursor-pointer list-none items-center gap-3 p-3">
-            <AgentAvatar avatar={agent.avatar as Avatar | null} size={44} label={agent.name} />
+            <AgentAvatar avatar={agent.avatar as Avatar | null} size={44} label={agent.name} level={agent.level} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-semibold">{agent.name}</span>

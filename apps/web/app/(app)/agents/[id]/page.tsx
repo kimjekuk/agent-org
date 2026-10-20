@@ -1,5 +1,5 @@
 import { isPersonalityType, PERSONALITY_TYPES } from "@agentorg/shared/agents/personality";
-import type { Avatar, ToolPermissions } from "@agentorg/shared/agents/templates";
+import { normalizeAvatar, type ToolPermissions } from "@agentorg/shared/agents/templates";
 import { getDb, schema } from "@agentorg/shared/db";
 import { levelProgress, levelTitle, masteredSkills } from "@agentorg/shared/growth";
 import { agentDailyJournal, kstDayRange, shiftDay } from "@agentorg/shared/journal";
@@ -14,7 +14,7 @@ import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonDanger, buttonGhost, card } from "@/lib/ui";
 import { cloneAgent, deleteAgent, toggleActive, togglePause } from "../actions";
-import { DirectiveForm, ProfileForm } from "../forms";
+import { CharacterEditor, DirectiveForm, ProfileForm } from "../forms";
 import { deleteMemory, resetMemories } from "../memory-actions";
 import { AddMemoryForm, EditMemoryForm } from "../memory-forms";
 
@@ -73,7 +73,7 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
   const growth = levelProgress(agent.xp);
   const mastered = masteredSkills(agent.skillXp as Record<string, number>);
   const personality = isPersonalityType(agent.personalityType) ? PERSONALITY_TYPES[agent.personalityType] : null;
-  const avatar = (agent.avatar ?? { hair: 0, face: 0, color: 0 }) as Avatar;
+  const avatar = normalizeAvatar(agent.avatar);
   const working = agent.status === "WORKING";
 
   return (
@@ -84,7 +84,7 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
         </Link>
       </div>
       <section className="flex items-center gap-4 px-4">
-        <AgentAvatar avatar={avatar} size={72} label={agent.name} />
+        <AgentAvatar avatar={avatar} size={72} label={agent.name} level={growth.level} />
         <div className="min-w-0">
           <h1 className="text-xl font-bold">{agent.name}</h1>
           <p className="text-sm opacity-70">
@@ -160,6 +160,7 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
                 rank: agent.rank,
                 personality: agent.personality,
                 personalityType: agent.personalityType,
+                speechTone: agent.speechTone,
                 skills: (agent.skills ?? []) as string[],
                 supervisorId: agent.supervisorId,
                 modelPrimary: agent.modelPrimary,
@@ -167,11 +168,17 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
                 maxTurns: agent.maxTurns,
                 budgetLimit: agent.budgetLimit,
                 toolPermissions: (agent.toolPermissions ?? {}) as ToolPermissions,
-                avatar,
               }}
               supervisors={others}
               models={models}
             />
+          </div>
+        </details>
+
+        <details id="character" className={`${card} scroll-mt-20`}>
+          <summary className="cursor-pointer font-semibold">🎨 캐릭터 꾸미기</summary>
+          <div className="pt-3">
+            <CharacterEditor agentId={agent.id} avatar={avatar} level={growth.level} />
           </div>
         </details>
 

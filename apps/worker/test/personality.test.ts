@@ -67,6 +67,10 @@ describe("성격 유형 · 하루 일지", () => {
     expect(calls[0].system).toContain(`# 일하는 방식\n${personalityPrompt("ANALYTIC")}`);
     expect(calls[0].system?.indexOf("# 최우선 원칙")).toBe(0);
     expect(personalityPrompt(null)).toBe("");
+    // F202 말투를 고르면 '일하는 방식'에 함께 들어간다
+    await db.update(schema.agents).set({ speechTone: "POLITE" }).where(eq(schema.agents.id, ctx.agent.id));
+    await directive("경쟁사 분석");
+    expect(calls[1].system).toContain("말투: 보고와 대화는 정중한 존댓말");
     expect(personalityPrompt("없는유형")).toBe("");
   });
 

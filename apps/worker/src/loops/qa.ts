@@ -1,6 +1,6 @@
 // F107 QA 담당의 한 턴: 리더가 맡긴 Task 결과를 검토해 통과·반려를 리더에게 돌려준다 (반영은 리더가 한다).
 // 턴은 runAgent → runTurn(guards)으로 실행된다 (CLAUDE.md 절대 규칙 1). LLM은 gateway로만 (규칙 2).
-import { personalityPrompt } from "@agentorg/shared/agents/personality";
+import { stylePrompt } from "@agentorg/shared/agents/personality";
 import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
 import { messages, tasks } from "@agentorg/shared/db/schema";
@@ -41,7 +41,7 @@ export async function handleQaReview(db: AnyDb, agent: Agent, mission: Mission, 
           name: agent.name,
           role: `품질 검토 담당 (QA)${skills.length ? ` (${skills.join(", ")})` : ""}`,
           personality: agent.personality,
-          style: personalityPrompt(agent.personalityType),
+          style: stylePrompt(agent),
           skills,
           instructions: "- 팀원의 Task 결과를 미션 기준으로 검토한다. 빠진 내용·틀린 사실·근거 없는 주장을 찾는다.\n- 요청한 JSON 형식을 정확히 지킨다. 모르는 것은 지어내지 않는다.",
         }),

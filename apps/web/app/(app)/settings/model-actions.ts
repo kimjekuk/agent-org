@@ -1,6 +1,7 @@
 "use server";
 
 // 모델·요금 관리 (OpenAI·Gemini·DeepSeek 등). 요금은 사용자가 공식 페이지를 보고 입력·확인한다 (2026-10-18 결정)
+import { OFFICE_THEMES, type OfficeTheme } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import { getDb, schema } from "@agentorg/shared/db";
 import { listModelChoices, PROVIDERS, type ProviderName } from "@agentorg/shared/llm/models";
@@ -128,4 +129,28 @@ export async function saveBudgetDaily(form: FormData) {
     });
   });
   revalidatePath("/settings");
+}
+
+/** F202 사무실 테마 (버튼으로 고른다) */
+export async function saveOfficeTheme(form: FormData) {
+  const user = await requireUser();
+  const org = await getCurrentOrg(user.id);
+  if (!org) return;
+  const theme = String(form.get("theme"));
+  if (!(theme in OFFICE_THEMES) || theme === org.officeTheme) return;
+  await getDb().transaction(async (tx) => {
+    await tx.update(schema.organizations).set({ officeTheme: theme }).where(eq(schema.organizations.id, org.id));
+    await writeAudit(tx, {
+      orgId: org.id,
+      actorType: "USER",
+      actorId: user.id,
+      action: "org.office_theme",
+      targetType: "organization",
+      targetId: org.id,
+      reasoning: `사무실 테마 ${OFFICE_THEMES[org.officeTheme as OfficeTheme]?.label ?? org.officeTheme} → ${OFFICE_THEMES[theme as OfficeTheme].label}`,
+    });
+  });
+  revalidatePath("/settings");
+  revalidatePath("/dashboard");
+  revalidatePath("/office");
 }

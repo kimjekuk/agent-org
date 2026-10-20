@@ -7,7 +7,8 @@ import { button, buttonDanger, buttonGhost, card, input } from "@/lib/ui";
 import { logout } from "@/app/login/actions";
 import { deleteApiKey, deleteOrg, selectOrg } from "./actions";
 import { ApiKeyForm, CreateOrgForm, RenameOrgForm, TestConnectionForm } from "./forms";
-import { saveBudgetDaily, saveFallbackModel, toggleModel } from "./model-actions";
+import { saveBudgetDaily, saveFallbackModel, saveOfficeTheme, toggleModel } from "./model-actions";
+import { OFFICE_THEMES, type OfficeTheme } from "@agentorg/shared/agents/templates";
 import { DeleteModelForm, ModelForm } from "./model-forms";
 
 export const dynamic = "force-dynamic";
@@ -177,6 +178,36 @@ export default async function SettingsPage() {
             <button type="submit" className={`${button} shrink-0`}>
               저장
             </button>
+          </form>
+        </section>
+      )}
+
+      {currentOrg && (
+        <section className={`${card} flex flex-col gap-3`} aria-label="사무실 테마">
+          <h2 className="font-semibold">사무실 테마</h2>
+          <p className="text-sm opacity-70">대시보드·사무실 화면의 바닥과 벽 색입니다.</p>
+          <form action={saveOfficeTheme} className="grid grid-cols-2 gap-2">
+            {(Object.keys(OFFICE_THEMES) as OfficeTheme[]).map((k) => {
+              const t = OFFICE_THEMES[k];
+              const on = currentOrg.officeTheme === k;
+              return (
+                <button
+                  key={k}
+                  type="submit"
+                  name="theme"
+                  value={k}
+                  aria-pressed={on}
+                  className={`flex h-14 items-center gap-2 rounded-lg border px-3 text-sm font-semibold ${on ? "border-foreground ring-2 ring-foreground" : "border-black/15 dark:border-white/15"}`}
+                >
+                  <span className="flex shrink-0 overflow-hidden rounded border border-black/20" aria-hidden>
+                    <span className="h-6 w-4" style={{ background: t.floor }} />
+                    <span className="h-6 w-4" style={{ background: t.wall }} />
+                    <span className="h-6 w-4" style={{ background: t.rug }} />
+                  </span>
+                  {t.label}
+                </button>
+              );
+            })}
           </form>
         </section>
       )}

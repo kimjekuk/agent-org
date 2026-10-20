@@ -1,8 +1,8 @@
 "use server";
 
 // F005 에이전트 채용·프로필 · F009 사용자 직접 지시. 모든 변경은 AuditLog에 기록한다 (CLAUDE.md 절대 규칙 4).
-import { isPersonalityType } from "@agentorg/shared/agents/personality";
-import { AGENT_DEFAULTS, type AgentTemplate, CONTENT_TEAM, defaultModelFor, ROLE_TEMPLATES, type ToolPermissions } from "@agentorg/shared/agents/templates";
+import { isPersonalityType, isSpeechTone } from "@agentorg/shared/agents/personality";
+import { AGENT_DEFAULTS, type AgentTemplate, CONTENT_TEAM, defaultModelFor, normalizeAvatar, ROLE_TEMPLATES, type ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import { type AnyDb, getDb, schema } from "@agentorg/shared/db";
 import { publishOrgEvent } from "@agentorg/shared/events";
@@ -109,7 +109,6 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
     qa_review: form.get("tool_qa_review") === "on",
     code_exec: form.get("tool_code_exec") === "on",
   };
-  const avatar = { hair: Number(form.get("hair")) % 4, face: Number(form.get("face")) % 4, color: Number(form.get("color")) % 6 };
   // F110: 코드 실행을 새로 켰는데 그 도구를 못 쓰는 모델(Haiku 등)이면 Sonnet으로 바꾼다 (2026-10-19 결정)
   const before = (agent.toolPermissions ?? {}) as ToolPermissions;
   const switched = toolPermissions.code_exec && !before.code_exec && !supportsCodeExecution(modelPrimary);
@@ -120,6 +119,7 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
     rank: rank as typeof agent.rank,
     personality: String(form.get("personality") ?? "").trim().slice(0, 200) || null,
     personalityType: isPersonalityType(form.get("personalityType")) ? String(form.get("personalityType")) : null,
+    speechTone: isSpeechTone(form.get("speechTone")) ? String(form.get("speechTone")) : null,
     skills,
     supervisorId,
     modelPrimary,
@@ -127,7 +127,6 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
     maxTurns,
     budgetLimit,
     toolPermissions,
-    avatar,
   };
   await getDb().transaction(async (tx) => {
     await tx.update(schema.agents).set(changes).where(eq(schema.agents.id, agent.id));
@@ -287,4 +286,37 @@ async function hasUnreadDirective(agentId: string): Promise<boolean> {
     .where(and(eq(schema.messages.receiverAgentId, agentId), eq(schema.messages.type, "DIRECTIVE"), isNull(schema.messages.readAt)))
     .limit(1);
   return Boolean(m);
+}
+
+// ── F202 캐릭터 꾸미기: 미리보기에서 고른 파츠를 저장 ─────────────────────────────
+
+export async function saveAvatar(_prev: FormState, form: FormData): Promise<FormState> {
+  const { user, org } = await context();
+  const agent = await getOrgAgent(org.id, String(form.get("id")));
+  if (!agent) return { error: "에이전트를 찾을 수 없습니다" };
+  const avatar = normalizeAvatar({
+    hair: form.get("hair"),
+    face: form.get("face"),
+    color: form.get("color"),
+    hairColor: form.get("hairColor"),
+    skin: form.get("skin"),
+    outfit: form.get("outfit"),
+    accessory: form.get("accessory"),
+  });
+  await getDb().transaction(async (tx) => {
+    await tx.update(schema.agents).set({ avatar }).where(eq(schema.agents.id, agent.id));
+    await writeAudit(tx, {
+      orgId: org.id,
+      actorType: "USER",
+      actorId: user.id,
+      action: "agent.update",
+      targetType: "agent",
+      targetId: agent.id,
+      reasoning: "캐릭터 꾸미기 저장",
+      payload: { from: agent.avatar, to: avatar },
+    });
+  });
+  await publishOrgEvent(org.id, { type: "agent", agentId: agent.id });
+  revalidatePath(`/agents/${agent.id}`);
+  return { ok: "캐릭터를 저장했습니다" };
 }

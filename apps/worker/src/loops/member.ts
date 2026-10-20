@@ -1,7 +1,7 @@
 // F008 팀원 루프 (PRD 5장 F007/F008). 매 턴: guards → 지시 1개 처리 → 산출물 저장 → 보고.
 // 미션의 리더가 받을 일(계획·검토·통합)은 leader.ts가 처리한다.
 // 턴은 runTurn으로만 실행한다 (CLAUDE.md 절대 규칙 1). LLM은 gateway로만 (규칙 2).
-import { personalityPrompt } from "@agentorg/shared/agents/personality";
+import { stylePrompt } from "@agentorg/shared/agents/personality";
 import type { AgentTemplate, ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
@@ -285,7 +285,7 @@ function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, k
     name: agent.name,
     role: `${RANK_LABEL[agent.rank]}${skills.length ? ` (${skills.join(", ")})` : ""}`,
     personality: agent.personality,
-    style: personalityPrompt(agent.personalityType),
+    style: stylePrompt(agent),
     skills,
     instructions: rules.map((r) => `- ${r}`).join("\n"),
     memory,
