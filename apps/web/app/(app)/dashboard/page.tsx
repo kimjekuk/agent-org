@@ -1,9 +1,11 @@
 import type { Avatar } from "@agentorg/shared/agents/templates";
 import { levelFor, spentToday } from "@agentorg/shared/budget";
 import { getDb, schema } from "@agentorg/shared/db";
+import { costStats, statsRange } from "@agentorg/shared/stats";
 import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import Link from "next/link";
 import { AgentAvatar } from "@/components/AgentAvatar";
+import { DailyBars } from "@/components/Charts";
 import { Office } from "@/components/Office";
 import { RANK_LABEL, isRestTime, statusBadge } from "@/lib/agents";
 import { MISSION_STATUS, progress } from "@/lib/missions";
@@ -41,7 +43,7 @@ export default async function DashboardPage() {
   const [me] = await db.select({ briefingSeenAt: schema.users.briefingSeenAt, createdAt: schema.users.createdAt }).from(schema.users).where(eq(schema.users.id, user.id));
   const since = me?.briefingSeenAt ?? me?.createdAt ?? new Date(0);
 
-  const [agents, active, [pending], today, briefing, office] = await Promise.all([
+  const [agents, active, [pending], today, briefing, office, week] = await Promise.all([
     db.select().from(schema.agents).where(eq(schema.agents.orgId, org.id)).orderBy(asc(schema.agents.createdAt)),
     db
       .select()
@@ -55,6 +57,7 @@ export default async function DashboardPage() {
     spentToday(db, org.id),
     collectBriefing(org.id, since),
     loadOffice(org),
+    costStats(db, org.id, statsRange("7d")),
   ]);
   const team = agents.filter((a) => a.isActive).sort((a, b) => RANK_ORDER[a.rank] - RANK_ORDER[b.rank]);
   const working = team.filter((a) => a.status === "WORKING").length;
@@ -105,6 +108,16 @@ export default async function DashboardPage() {
           </Link>
         ))}
       </section>
+
+      <Link href="/stats" className={`${card} flex flex-col gap-2 hover:bg-black/5 dark:hover:bg-white/5`} aria-label="최근 7일 비용 — 통계 보기">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="font-semibold">📊 최근 7일 비용</h2>
+          <span className="text-sm tabular-nums">
+            {won.format(week.totalKrw)}원 <span className="opacity-60">· 통계 ›</span>
+          </span>
+        </div>
+        <DailyBars data={week.byDay} height={64} compact />
+      </Link>
 
       {briefing.lines.length > 0 && (
         <section className={`${card} flex flex-col gap-2 border-blue-500/40`} aria-label="출근 브리핑">
