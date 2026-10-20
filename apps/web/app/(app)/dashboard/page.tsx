@@ -4,8 +4,10 @@ import { getDb, schema } from "@agentorg/shared/db";
 import { and, asc, count, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import Link from "next/link";
 import { AgentAvatar } from "@/components/AgentAvatar";
+import { Office } from "@/components/Office";
 import { RANK_LABEL, isRestTime, statusBadge } from "@/lib/agents";
 import { MISSION_STATUS, progress } from "@/lib/missions";
+import { loadOffice } from "@/lib/office";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonGhost, card } from "@/lib/ui";
@@ -39,7 +41,7 @@ export default async function DashboardPage() {
   const [me] = await db.select({ briefingSeenAt: schema.users.briefingSeenAt, createdAt: schema.users.createdAt }).from(schema.users).where(eq(schema.users.id, user.id));
   const since = me?.briefingSeenAt ?? me?.createdAt ?? new Date(0);
 
-  const [agents, active, [pending], today, briefing] = await Promise.all([
+  const [agents, active, [pending], today, briefing, office] = await Promise.all([
     db.select().from(schema.agents).where(eq(schema.agents.orgId, org.id)).orderBy(asc(schema.agents.createdAt)),
     db
       .select()
@@ -52,6 +54,7 @@ export default async function DashboardPage() {
       .where(and(eq(schema.approvalRequests.orgId, org.id), eq(schema.approvalRequests.status, "PENDING"))),
     spentToday(db, org.id),
     collectBriefing(org.id, since),
+    loadOffice(org),
   ]);
   const team = agents.filter((a) => a.isActive).sort((a, b) => RANK_ORDER[a.rank] - RANK_ORDER[b.rank]);
   const working = team.filter((a) => a.status === "WORKING").length;
@@ -80,6 +83,18 @@ export default async function DashboardPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pb-12">
       <h1 className="text-xl font-bold">대시보드</h1>
+
+      {office.agents.length > 0 && (
+        <section className="flex flex-col gap-2" aria-label="사무실">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">🏢 사무실</h2>
+            <Link href="/office" className="text-sm underline">
+              크게 보기
+            </Link>
+          </div>
+          <Office agents={office.agents} deskCount={office.deskCount} />
+        </section>
+      )}
 
       <section className="grid grid-cols-2 gap-3" aria-label="요약">
         {stats.map((s) => (
