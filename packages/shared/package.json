@@ -36,7 +36,9 @@
     "./stats": "./src/stats.ts",
     "./replay": "./src/replay.ts",
     "./history": "./src/history.ts",
-    "./export": "./src/export.ts"
+    "./export": "./src/export.ts",
+    "./agents/language": "./src/agents/language.ts",
+    "./i18n": "./src/i18n/index.ts"
   },
   "scripts": {
     "typecheck": "tsc",

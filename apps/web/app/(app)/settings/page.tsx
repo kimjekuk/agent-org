@@ -12,6 +12,10 @@ import { OFFICE_THEMES, type OfficeTheme } from "@agentorg/shared/agents/templat
 import { DeleteModelForm, ModelForm } from "./model-forms";
 import { listExportChannels } from "@agentorg/shared/export";
 import { deleteChannel } from "./export-actions";
+import { saveLocale, saveOrgLanguage } from "./language-actions";
+import { type AgentLanguage, LANGUAGES } from "@agentorg/shared/agents/language";
+import { type Locale, LOCALES } from "@agentorg/shared/i18n";
+import { getLocale, getT } from "@/lib/i18n";
 import { EmailChannelForm, SlackChannelForm } from "./export-forms";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +39,8 @@ export default async function SettingsPage() {
   const currentOrgId = currentOrg?.id;
   const models = await db.select().from(schema.llmModels).orderBy(asc(schema.llmModels.provider), asc(schema.llmModels.label));
   const modelChoices = await listModelChoices(db);
+  const locale = await getLocale();
+  const t = await getT();
   const exportChannels = currentOrg ? await listExportChannels(db, currentOrg.id) : [];
   const providerOptions = PROVIDERS.filter((p) => p !== "anthropic").map((p) => ({ value: p, label: PROVIDER_LABEL[p] }));
 
@@ -48,6 +54,45 @@ export default async function SettingsPage() {
           </button>
         </form>
       </header>
+
+      <section className={`${card} flex flex-col gap-3`} aria-label={t("화면 언어")}>
+        <h2 className="font-semibold">{t("화면 언어")}</h2>
+        <form action={saveLocale} className="grid grid-cols-2 gap-2">
+          {(Object.keys(LOCALES) as Locale[]).map((k) => (
+            <button
+              key={k}
+              type="submit"
+              name="locale"
+              value={k}
+              aria-pressed={locale === k}
+              className={`h-11 rounded-lg border text-sm font-semibold ${locale === k ? "border-foreground ring-2 ring-foreground" : "border-black/15 dark:border-white/15"}`}
+            >
+              {LOCALES[k]}
+            </button>
+          ))}
+        </form>
+      </section>
+
+      {currentOrg && (
+        <section className={`${card} flex flex-col gap-3`} aria-label={t("에이전트 사용 언어")}>
+          <h2 className="font-semibold">{t("에이전트 사용 언어")}</h2>
+          <p className="text-sm opacity-70">{t("결과물·보고·회의를 이 언어로 씁니다. 에이전트 프로필에서 따로 바꿀 수 있습니다.")}</p>
+          <form action={saveOrgLanguage} className="grid grid-cols-3 gap-2">
+            {(Object.keys(LANGUAGES) as AgentLanguage[]).map((k) => (
+              <button
+                key={k}
+                type="submit"
+                name="language"
+                value={k}
+                aria-pressed={currentOrg.language === k}
+                className={`h-11 rounded-lg border text-sm font-semibold ${currentOrg.language === k ? "border-foreground ring-2 ring-foreground" : "border-black/15 dark:border-white/15"}`}
+              >
+                {LANGUAGES[k].label}
+              </button>
+            ))}
+          </form>
+        </section>
+      )}
 
       <section className={`${card} flex flex-col gap-3`}>
         <h2 className="font-semibold">조직</h2>

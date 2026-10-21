@@ -34,6 +34,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   briefingSeenAt: timestamp("briefing_seen_at", { withTimezone: true }), // F016 출근 브리핑을 마지막으로 닫은 때
+  locale: text("locale").notNull().default("ko"), // F209 화면 언어 (ko·en)
   createdAt: createdAt(),
 });
 
@@ -61,6 +62,7 @@ export const organizations = pgTable("organizations", {
   workHours: jsonb("work_hours"),
   fallbackModel: text("fallback_model"), // F109 API 장애 시 대체 모델 (없으면 대체 없이 실패 처리)
   officeTheme: text("office_theme").notNull().default("DEFAULT"), // F202 사무실 테마 (DEFAULT·MODERN·FOREST·NIGHT)
+  language: text("language").notNull().default("ko"), // F209 에이전트 기본 사용 언어 (agents/language.ts)
   createdAt: createdAt(),
 });
 
@@ -72,6 +74,7 @@ export const agents = pgTable("agents", {
   personality: text("personality"),
   personalityType: text("personality_type"), // F103 성격 유형 (agents/personality.ts)
   speechTone: text("speech_tone"), // F202 말투 (agents/personality.ts SPEECH_TONES, 없으면 성격 유형의 말투)
+  language: text("language"), // F209 사용 언어 (없으면 조직 기본값)
   rank: agentRank("rank").notNull().default("MEMBER"),
   supervisorId: uuid("supervisor_id").references((): AnyPgColumn => agents.id, { onDelete: "set null" }),
   skills: jsonb("skills").$type<string[]>().notNull().default([]),

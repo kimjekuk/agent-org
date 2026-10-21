@@ -3,6 +3,7 @@ import { and, count, eq } from "drizzle-orm";
 import { EmergencyBanner, EmergencyStopButton } from "@/components/EmergencyStop";
 import { LiveRefresh } from "@/components/LiveRefresh";
 import { BottomTabs, Sidebar } from "@/components/Nav";
+import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const org = await getCurrentOrg(user.id);
+  const t = await getT();
   // 승인함 배지: 기다리는 요청 수 (PRD 4장)
   const [pending] = org
     ? await getDb()
@@ -28,7 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4">
           <div className="min-w-0">
             <p className="truncate text-xs opacity-60">AgentOrg</p>
-            <p className="truncate font-bold">{org?.name ?? "조직 없음"}</p>
+            <p className="truncate font-bold">{org?.name ?? t("조직 없음")}</p>
           </div>
           {org && <EmergencyStopButton orgId={org.id} stopped={org.emergencyStop} />}
         </div>

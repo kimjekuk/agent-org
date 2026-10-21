@@ -1,6 +1,7 @@
 "use server";
 
 // F005 에이전트 채용·프로필 · F009 사용자 직접 지시. 모든 변경은 AuditLog에 기록한다 (CLAUDE.md 절대 규칙 4).
+import { isLanguage } from "@agentorg/shared/agents/language";
 import { isPersonalityType, isSpeechTone } from "@agentorg/shared/agents/personality";
 import { AGENT_DEFAULTS, type AgentTemplate, CONTENT_TEAM, defaultModelFor, normalizeAvatar, ROLE_TEMPLATES, type ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
@@ -120,6 +121,7 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
     personality: String(form.get("personality") ?? "").trim().slice(0, 200) || null,
     personalityType: isPersonalityType(form.get("personalityType")) ? String(form.get("personalityType")) : null,
     speechTone: isSpeechTone(form.get("speechTone")) ? String(form.get("speechTone")) : null,
+    language: isLanguage(form.get("language")) ? String(form.get("language")) : null,
     skills,
     supervisorId,
     modelPrimary,

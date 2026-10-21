@@ -1,6 +1,7 @@
 // F008 팀원 루프 (PRD 5장 F007/F008). 매 턴: guards → 지시 1개 처리 → 산출물 저장 → 보고.
 // 미션의 리더가 받을 일(계획·검토·통합)은 leader.ts가 처리한다.
 // 턴은 runTurn으로만 실행한다 (CLAUDE.md 절대 규칙 1). LLM은 gateway로만 (규칙 2).
+import type { AgentLanguage } from "@agentorg/shared/agents/language";
 import { stylePrompt } from "@agentorg/shared/agents/personality";
 import type { AgentTemplate, ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
@@ -20,7 +21,7 @@ import { allowedAfterHours, isWithinWorkHours, parseWorkHours } from "@agentorg/
 import { and, asc, desc, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import { runTurn, type StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
-import { type Agent, type Deps, type Enqueue, type Message, type Publish, preview, setStatus, titleOf } from "./common";
+import { type Agent, type Deps, type Enqueue, type Message, type Publish, preview, setStatus, titleOf, agentLanguage } from "./common";
 import { handleLeaderMessage, isLeaderWork } from "./leader";
 import { handleMeetingTurn } from "./meeting";
 import { handleQaReview } from "./qa";
@@ -137,7 +138,7 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
         purpose: `지시 처리: ${preview(msg.content)}`,
         model: agent.modelPrimary ?? DEFAULT_MODELS.primary,
         economyModel: agent.modelEconomy ?? DEFAULT_MODELS.economy,
-        system: systemPromptFor(agent, perms, await memoryContext(db, agent.id, msg.missionId), await knowledgeContext(db, job.orgId, msg.content.slice(0, 1000), msg.missionId), !msg.missionId),
+        system: systemPromptFor(agent, perms, await memoryContext(db, agent.id, msg.missionId), await knowledgeContext(db, job.orgId, msg.content.slice(0, 1000), msg.missionId), !msg.missionId, await agentLanguage(db, agent)),
         messages: [{ role: "user", content: msg.content }],
         webSearchMaxUses: perms.web_search ? WEB_SEARCH_MAX_USES : undefined,
         codeExecution: Boolean(perms.code_exec), // F110
@@ -264,14 +265,14 @@ async function handleDirective(db: AnyDb, job: RunAgentJob, agent: Agent, msg: M
   }
 }
 
-function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, knowledge: string, direct: boolean): string {
+function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, knowledge: string, direct: boolean, language: AgentLanguage): string {
   // 웹 검색은 Claude 모델만 (2026-10-18 결정). 다른 회사 모델이면 권한이 있어도 검색 없이 진행한다
   const canSearch = perms.web_search && supportsWebSearch(agent.modelPrimary ?? DEFAULT_MODELS.primary);
   // F110 코드 실행도 Claude Sonnet·Opus만. 다른 모델이면 권한이 있어도 실행 없이 진행
   const canCode = perms.code_exec && supportsCodeExecution(agent.modelPrimary ?? DEFAULT_MODELS.primary);
   const skills = (agent.skills ?? []) as string[];
   const rules = [
-    "지시를 처리해 결과물을 한국어 마크다운으로 작성한다. 첫 줄은 '# 제목'으로 시작한다.",
+    `지시를 처리해 결과물을 ${language === "ko" ? "한국어 " : ""}마크다운으로 작성한다. 첫 줄은 '# 제목'으로 시작한다.`,
     "자료를 인용하면 출처(URL)를 함께 적는다. 모르는 것은 지어내지 않는다.",
     "지시가 불명확하면 합리적으로 가정해 진행하고, 맨 끝 '## 확인이 필요한 점'에 가정한 내용을 적는다.",
     canSearch
@@ -286,6 +287,7 @@ function systemPromptFor(agent: Agent, perms: ToolPermissions, memory: string, k
     role: `${RANK_LABEL[agent.rank]}${skills.length ? ` (${skills.join(", ")})` : ""}`,
     personality: agent.personality,
     style: stylePrompt(agent),
+    language,
     skills,
     instructions: rules.map((r) => `- ${r}`).join("\n"),
     memory,

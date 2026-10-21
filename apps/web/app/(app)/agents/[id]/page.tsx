@@ -161,6 +161,7 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
                 personality: agent.personality,
                 personalityType: agent.personalityType,
                 speechTone: agent.speechTone,
+                language: agent.language,
                 skills: (agent.skills ?? []) as string[],
                 supervisorId: agent.supervisorId,
                 modelPrimary: agent.modelPrimary,

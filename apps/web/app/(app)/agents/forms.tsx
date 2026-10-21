@@ -1,5 +1,6 @@
 "use client";
 
+import { type AgentLanguage, LANGUAGES } from "@agentorg/shared/agents/language";
 import { PERSONALITY_TYPES, type PersonalityType, SPEECH_TONES, type SpeechTone } from "@agentorg/shared/agents/personality";
 import {
   ACCESSORY_NAMES,
@@ -93,6 +94,7 @@ interface ProfileProps {
     personality: string | null;
     personalityType: string | null;
     speechTone: string | null;
+    language: string | null;
     skills: string[];
     supervisorId: string | null;
     modelPrimary: string | null;
@@ -154,6 +156,17 @@ export function ProfileForm({ agent, supervisors, models }: ProfileProps) {
           {(Object.keys(SPEECH_TONES) as SpeechTone[]).map((k) => (
             <option key={k} value={k}>
               {SPEECH_TONES[k].label} — “{SPEECH_TONES[k].example}”
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className={field}>
+        사용 언어 (결과물·보고)
+        <select name="language" defaultValue={agent.language ?? ""} className={select}>
+          <option value="">조직 기본값</option>
+          {(Object.keys(LANGUAGES) as AgentLanguage[]).map((k) => (
+            <option key={k} value={k}>
+              {LANGUAGES[k].label}
             </option>
           ))}
         </select>

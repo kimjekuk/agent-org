@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { I18nProvider } from "@/components/I18n";
 import { ServiceWorkerRegister } from "@/components/ServiceWorker";
+import { getLocale } from "@/lib/i18n";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,17 +27,18 @@ export const viewport: Viewport = {
   viewportFit: "cover", // 아이폰 노치·하단 바 영역까지 (하단 탭바는 safe-area 여백으로 피한다)
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
   return (
-    <html lang="ko">
+    <html lang={locale}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <I18nProvider locale={locale}>{children}</I18nProvider>
         <ServiceWorkerRegister />
       </body>
     </html>
