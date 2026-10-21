@@ -5,6 +5,7 @@ import { getDb } from "@agentorg/shared/db";
 import { deleteExportChannel, EXPORT_CHANNELS, type ExportChannel, saveExportChannel } from "@agentorg/shared/export";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 
@@ -17,17 +18,18 @@ export async function saveChannel(_prev: ExportChannelState, form: FormData): Pr
   const org = await getCurrentOrg(user.id);
   if (!org) redirect("/settings");
   const kind = String(form.get("kind"));
-  if (!(EXPORT_CHANNELS as readonly string[]).includes(kind)) return { error: "연결 종류를 찾을 수 없습니다" };
+  const t = await getT();
+  if (!(EXPORT_CHANNELS as readonly string[]).includes(kind)) return { error: t("연결 종류를 찾을 수 없습니다") };
   const raw = Object.fromEntries(FIELDS.map((f) => [f, String(form.get(f) ?? "")]));
   let r: Awaited<ReturnType<typeof saveExportChannel>>;
   try {
     r = await saveExportChannel(getDb(), { orgId: org.id, userId: user.id, kind: kind as ExportChannel, raw });
   } catch {
-    return { error: "서버 암호화 설정(ENCRYPTION_KEY)이 없습니다. 잠시 후 다시 시도해 주세요" };
+    return { error: t("서버 암호화 설정(ENCRYPTION_KEY)이 없습니다. 잠시 후 다시 시도해 주세요") };
   }
   if ("error" in r) return { error: r.error };
   revalidatePath("/settings");
-  return { ok: "암호화해서 저장했습니다" };
+  return { ok: t("암호화해서 저장했습니다") };
 }
 
 export async function deleteChannel(form: FormData) {

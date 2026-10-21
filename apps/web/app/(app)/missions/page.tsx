@@ -2,6 +2,7 @@ import { getDb, schema } from "@agentorg/shared/db";
 import { desc, eq, inArray } from "drizzle-orm";
 import Link from "next/link";
 import { MISSION_STATUS, progress } from "@/lib/missions";
+import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { button, card } from "@/lib/ui";
@@ -12,15 +13,16 @@ export const dynamic = "force-dynamic";
 export default async function MissionsPage() {
   const user = await requireUser();
   const org = await getCurrentOrg(user.id);
+  const t = await getT();
   if (!org) {
     return (
       <main className="mx-auto max-w-3xl p-4">
         <p className="text-sm">
-          먼저{" "}
+          {t("먼저")}{" "}
           <Link href="/settings" className="underline">
-            설정
+            {t("설정")}
           </Link>
-          에서 조직을 만들어 주세요.
+          {t("에서 조직을 만들어 주세요.")}
         </p>
       </main>
     );
@@ -44,15 +46,15 @@ export default async function MissionsPage() {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pb-12">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-xl font-bold">미션</h1>
+        <h1 className="text-xl font-bold">{t("미션")}</h1>
         <Link href="/missions/new" className={`${button} flex items-center`}>
-          + 새 미션
+          + {t("새 미션")}
         </Link>
       </div>
-      {list.length === 0 && <p className="text-sm opacity-70">아직 미션이 없습니다. 주제 하나만 적으면 리더가 팀원에게 나눠 맡깁니다.</p>}
+      {list.length === 0 && <p className="text-sm opacity-70">{t("아직 미션이 없습니다. 주제 하나만 적으면 리더가 팀원에게 나눠 맡깁니다.")}</p>}
       <ul className="flex flex-col gap-3">
         {sorted.map((m) => {
-          const tasks = allTasks.filter((t) => t.missionId === m.id);
+          const tasks = allTasks.filter((k) => k.missionId === m.id);
           const pct = progress(tasks);
           const st = MISSION_STATUS[m.status];
           return (
@@ -60,13 +62,13 @@ export default async function MissionsPage() {
               <Link href={`/missions/${m.id}`} className={`${card} flex flex-col gap-2 hover:bg-black/5 dark:hover:bg-white/5`}>
                 <div className="flex items-start gap-2">
                   <span className="min-w-0 flex-1 font-semibold">{m.title}</span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${st.className}`}>{st.label}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${st.className}`}>{t(st.label)}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/15" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
                   <div className="h-full bg-blue-600" style={{ width: `${pct}%` }} />
                 </div>
                 <p className="text-xs opacity-70">
-                  Task {tasks.filter((t) => t.status === "DONE").length}/{tasks.length} · {pct}%
+                  {t("Task {done}/{total} · {pct}%", { done: tasks.filter((k) => k.status === "DONE").length, total: tasks.length, pct })}
                 </p>
               </Link>
             </li>

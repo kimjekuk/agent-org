@@ -1,6 +1,7 @@
 "use server";
 
 // F005 에이전트 채용·프로필 · F009 사용자 직접 지시. 모든 변경은 AuditLog에 기록한다 (CLAUDE.md 절대 규칙 4).
+import { isLanguage } from "@agentorg/shared/agents/language";
 import { isPersonalityType, isSpeechTone } from "@agentorg/shared/agents/personality";
 import { AGENT_DEFAULTS, type AgentTemplate, CONTENT_TEAM, defaultModelFor, normalizeAvatar, ROLE_TEMPLATES, type ToolPermissions } from "@agentorg/shared/agents/templates";
 import { writeAudit } from "@agentorg/shared/audit";
@@ -13,6 +14,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getOrgAgent } from "@/lib/agents";
+import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 
@@ -50,7 +52,7 @@ async function insertAgent(db: AnyDb, orgId: string, userId: string, t: AgentTem
     action: "agent.hire",
     targetType: "agent",
     targetId: agent.id,
-    reasoning: `${t.title} 템플릿으로 "${name}" 채용`,
+    reasoning: `${t.title} 템플릿으로 "${name}" 채용`, // i18n-ignore
   });
   return agent;
 }
@@ -69,35 +71,37 @@ export async function hireContentTeam() {
 
 export async function hireAgent(_prev: FormState, form: FormData): Promise<FormState> {
   const { user, org } = await context();
-  const t = ROLE_TEMPLATES.find((r) => r.key === form.get("template"));
+  const t = await getT();
+  const tpl = ROLE_TEMPLATES.find((r) => r.key === form.get("template"));
   const name = String(form.get("name") ?? "").trim();
-  if (!t) return { error: "역할을 골라 주세요" };
-  if (name.length < 1 || name.length > 20) return { error: "이름은 1~20자로 입력해 주세요" };
-  const agent = await getDb().transaction((tx) => insertAgent(tx, org.id, user.id, t, name, null));
+  if (!tpl) return { error: t("역할을 골라 주세요") };
+  if (name.length < 1 || name.length > 20) return { error: t("이름은 1~20자로 입력해 주세요") };
+  const agent = await getDb().transaction((tx) => insertAgent(tx, org.id, user.id, tpl, name, null));
   revalidatePath("/agents");
   redirect(`/agents/${agent.id}`);
 }
 
 export async function updateAgent(_prev: FormState, form: FormData): Promise<FormState> {
   const { user, org } = await context();
+  const t = await getT();
   const agent = await getOrgAgent(org.id, String(form.get("id")));
-  if (!agent) return { error: "에이전트를 찾을 수 없습니다" };
+  if (!agent) return { error: t("에이전트를 찾을 수 없습니다") };
 
   const name = String(form.get("name") ?? "").trim();
-  if (name.length < 1 || name.length > 20) return { error: "이름은 1~20자로 입력해 주세요" };
+  if (name.length < 1 || name.length > 20) return { error: t("이름은 1~20자로 입력해 주세요") };
   const rank = String(form.get("rank"));
-  if (!["LEADER", "MANAGER", "MEMBER"].includes(rank)) return { error: "직급이 올바르지 않습니다" };
+  if (!["LEADER", "MANAGER", "MEMBER"].includes(rank)) return { error: t("직급이 올바르지 않습니다") };
   const supervisorId = String(form.get("supervisorId") ?? "") || null;
-  if (supervisorId && (supervisorId === agent.id || !(await getOrgAgent(org.id, supervisorId)))) return { error: "상사를 다시 골라 주세요" };
+  if (supervisorId && (supervisorId === agent.id || !(await getOrgAgent(org.id, supervisorId)))) return { error: t("상사를 다시 골라 주세요") };
   let modelPrimary = String(form.get("modelPrimary"));
   const modelEconomy = String(form.get("modelEconomy"));
   const choices = await listModelChoices(getDb());
-  if (!choices.some((m) => m.id === modelPrimary) || !choices.some((m) => m.id === modelEconomy)) return { error: "모델을 다시 골라 주세요 (꺼진 모델은 고를 수 없습니다)" };
+  if (!choices.some((m) => m.id === modelPrimary) || !choices.some((m) => m.id === modelEconomy)) return { error: t("모델을 다시 골라 주세요 (꺼진 모델은 고를 수 없습니다)") };
   const maxTurns = Number(form.get("maxTurns"));
-  if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 200) return { error: "최대 턴 수는 1~200 사이로 입력해 주세요" };
+  if (!Number.isInteger(maxTurns) || maxTurns < 1 || maxTurns > 200) return { error: t("최대 턴 수는 1~200 사이로 입력해 주세요") };
   const budgetRaw = String(form.get("budgetLimit") ?? "").trim();
   const budgetLimit = budgetRaw === "" ? null : Number(budgetRaw);
-  if (budgetLimit !== null && (!Number.isInteger(budgetLimit) || budgetLimit < 0)) return { error: "예산 한도는 0 이상의 원 단위 숫자로 입력해 주세요" };
+  if (budgetLimit !== null && (!Number.isInteger(budgetLimit) || budgetLimit < 0)) return { error: t("예산 한도는 0 이상의 원 단위 숫자로 입력해 주세요") };
   const skills = String(form.get("skills") ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -120,6 +124,7 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
     personality: String(form.get("personality") ?? "").trim().slice(0, 200) || null,
     personalityType: isPersonalityType(form.get("personalityType")) ? String(form.get("personalityType")) : null,
     speechTone: isSpeechTone(form.get("speechTone")) ? String(form.get("speechTone")) : null,
+    language: isLanguage(form.get("language")) ? String(form.get("language")) : null,
     skills,
     supervisorId,
     modelPrimary,
@@ -137,13 +142,13 @@ export async function updateAgent(_prev: FormState, form: FormData): Promise<For
       action: "agent.update",
       targetType: "agent",
       targetId: agent.id,
-      reasoning: "사용자가 프로필을 수정했습니다",
+      reasoning: "사용자가 프로필을 수정했습니다", // i18n-ignore
       payload: changes,
     });
   });
   await publishOrgEvent(org.id, { type: "agent", agentId: agent.id });
   revalidatePath(`/agents/${agent.id}`);
-  return { ok: switched ? "저장했습니다. 코드 실행은 Claude Sonnet·Opus만 되어 기본 모델을 Sonnet 5.5로 바꿨습니다." : "저장했습니다" };
+  return { ok: switched ? t("저장했습니다. 코드 실행은 Claude Sonnet·Opus만 되어 기본 모델을 Sonnet 5.5로 바꿨습니다.") : t("저장했습니다") };
 }
 
 export async function cloneAgent(form: FormData) {
@@ -172,7 +177,7 @@ export async function cloneAgent(form: FormData) {
         isActive: agent.isActive,
       })
       .returning();
-    await writeAudit(tx, { orgId: org.id, actorType: "USER", actorId: user.id, action: "agent.clone", targetType: "agent", targetId: c.id, reasoning: `"${agent.name}" 복제` });
+    await writeAudit(tx, { orgId: org.id, actorType: "USER", actorId: user.id, action: "agent.clone", targetType: "agent", targetId: c.id, reasoning: `"${agent.name}" 복제` }); // i18n-ignore
     return c;
   });
   redirect(`/agents/${copy.id}`);
@@ -192,7 +197,7 @@ export async function toggleActive(form: FormData) {
       action: agent.isActive ? "agent.fire" : "agent.rehire",
       targetType: "agent",
       targetId: agent.id,
-      reasoning: agent.isActive ? "사용자가 해고(비활성)했습니다" : "사용자가 재고용했습니다",
+      reasoning: agent.isActive ? "사용자가 해고(비활성)했습니다" : "사용자가 재고용했습니다", // i18n-ignore
     });
   });
   if (!agent.isActive && (await hasUnreadDirective(agent.id))) await enqueueAgentRun({ orgId: org.id, agentId: agent.id });
@@ -215,7 +220,7 @@ export async function togglePause(form: FormData) {
       action: pausing ? "agent.pause" : "agent.unpause",
       targetType: "agent",
       targetId: agent.id,
-      reasoning: pausing ? "사용자가 이 에이전트를 멈췄습니다" : "사용자가 이 에이전트를 다시 움직였습니다",
+      reasoning: pausing ? "사용자가 이 에이전트를 멈췄습니다" : "사용자가 이 에이전트를 다시 움직였습니다", // i18n-ignore
     });
   });
   if (!pausing && (await hasUnreadDirective(agent.id))) await enqueueAgentRun({ orgId: org.id, agentId: agent.id });
@@ -236,7 +241,7 @@ export async function deleteAgent(form: FormData) {
       action: "agent.delete",
       targetType: "agent",
       targetId: agent.id,
-      reasoning: `"${agent.name}" 삭제`,
+      reasoning: `"${agent.name}" 삭제`, // i18n-ignore
     });
   });
   await publishOrgEvent(org.id, { type: "agent", agentId: agent.id });
@@ -247,10 +252,11 @@ export async function deleteAgent(form: FormData) {
 
 export async function sendDirective(_prev: FormState, form: FormData): Promise<FormState> {
   const { user, org } = await context();
+  const t = await getT();
   const agent = await getOrgAgent(org.id, String(form.get("id")));
-  if (!agent) return { error: "에이전트를 찾을 수 없습니다" };
+  if (!agent) return { error: t("에이전트를 찾을 수 없습니다") };
   const content = String(form.get("content") ?? "").trim();
-  if (content.length < 1 || content.length > 4000) return { error: "지시는 1~4,000자로 입력해 주세요" };
+  if (content.length < 1 || content.length > 4000) return { error: t("지시는 1~4,000자로 입력해 주세요") };
 
   await getDb().transaction(async (tx) => {
     const [msg] = await tx
@@ -264,7 +270,7 @@ export async function sendDirective(_prev: FormState, form: FormData): Promise<F
       action: "message.directive",
       targetType: "message",
       targetId: msg.id,
-      reasoning: `"${agent.name}"에게 직접 지시`,
+      reasoning: `"${agent.name}"에게 직접 지시`, // i18n-ignore
     });
   });
   const queued = await enqueueAgentRun({ orgId: org.id, agentId: agent.id });
@@ -272,11 +278,11 @@ export async function sendDirective(_prev: FormState, form: FormData): Promise<F
   revalidatePath(`/agents/${agent.id}`);
 
   const notes = [];
-  if (!queued) notes.push("작업 대기열 연결이 늦어 최대 2분 뒤 시작합니다");
-  if (org.emergencyStop) notes.push("긴급 정지 중이라 재개하면 처리합니다");
-  if (!agent.isActive) notes.push("해고된 에이전트라 재고용해야 처리합니다");
-  if (agent.status === "PAUSED") notes.push("멈춘 에이전트라 재개해야 처리합니다");
-  return { ok: notes.length ? `지시를 보냈습니다. ${notes.join(", ")}.` : "지시를 보냈습니다. 처리가 끝나면 아래에 보고가 올라옵니다." };
+  if (!queued) notes.push(t("작업 대기열 연결이 늦어 최대 2분 뒤 시작합니다"));
+  if (org.emergencyStop) notes.push(t("긴급 정지 중이라 재개하면 처리합니다"));
+  if (!agent.isActive) notes.push(t("해고된 에이전트라 재고용해야 처리합니다"));
+  if (agent.status === "PAUSED") notes.push(t("멈춘 에이전트라 재개해야 처리합니다"));
+  return { ok: notes.length ? t("지시를 보냈습니다. {notes}.", { notes: notes.join(", ") }) : t("지시를 보냈습니다. 처리가 끝나면 아래에 보고가 올라옵니다.") };
 }
 
 async function hasUnreadDirective(agentId: string): Promise<boolean> {
@@ -292,8 +298,9 @@ async function hasUnreadDirective(agentId: string): Promise<boolean> {
 
 export async function saveAvatar(_prev: FormState, form: FormData): Promise<FormState> {
   const { user, org } = await context();
+  const t = await getT();
   const agent = await getOrgAgent(org.id, String(form.get("id")));
-  if (!agent) return { error: "에이전트를 찾을 수 없습니다" };
+  if (!agent) return { error: t("에이전트를 찾을 수 없습니다") };
   const avatar = normalizeAvatar({
     hair: form.get("hair"),
     face: form.get("face"),
@@ -312,11 +319,11 @@ export async function saveAvatar(_prev: FormState, form: FormData): Promise<Form
       action: "agent.update",
       targetType: "agent",
       targetId: agent.id,
-      reasoning: "캐릭터 꾸미기 저장",
+      reasoning: "캐릭터 꾸미기 저장", // i18n-ignore
       payload: { from: agent.avatar, to: avatar },
     });
   });
   await publishOrgEvent(org.id, { type: "agent", agentId: agent.id });
   revalidatePath(`/agents/${agent.id}`);
-  return { ok: "캐릭터를 저장했습니다" };
+  return { ok: t("캐릭터를 저장했습니다") };
 }

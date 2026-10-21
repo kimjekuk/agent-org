@@ -10,7 +10,7 @@ import type { MissionMessagePayload } from "@agentorg/shared/missions";
 import { eq } from "drizzle-orm";
 import type { StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
-import { type Agent, type Deps, type Message, type Mission, preview, setStatus } from "./common";
+import { type Agent, type Deps, type Message, type Mission, preview, setStatus, agentLanguage } from "./common";
 import { parseJsonObject } from "./leader";
 
 const QA_PRIORITY = 50; // 미션 Task와 같게
@@ -42,6 +42,7 @@ export async function handleQaReview(db: AnyDb, agent: Agent, mission: Mission, 
           role: `품질 검토 담당 (QA)${skills.length ? ` (${skills.join(", ")})` : ""}`,
           personality: agent.personality,
           style: stylePrompt(agent),
+          language: await agentLanguage(db, agent),
           skills,
           instructions: "- 팀원의 Task 결과를 미션 기준으로 검토한다. 빠진 내용·틀린 사실·근거 없는 주장을 찾는다.\n- 요청한 JSON 형식을 정확히 지킨다. 모르는 것은 지어내지 않는다.",
         }),

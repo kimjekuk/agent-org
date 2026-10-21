@@ -1,0 +1,20 @@
+// 공통 (메뉴·레이아웃·공통 이름표)
+export const common: Record<string, string> = {
+  대시보드: "Dashboard",
+  미션: "Missions",
+  승인함: "Approvals",
+  에이전트: "Agents",
+  더보기: "More",
+  사무실: "Office",
+  조직도: "Org chart",
+  산출물: "Artifacts",
+  통계: "Stats",
+  연표: "History",
+  지식: "Knowledge",
+  예약: "Schedules",
+  로그: "Logs",
+  설정: "Settings",
+  "주 메뉴": "Main menu",
+  "대기 {n}건": "{n} waiting",
+  "조직 없음": "No organization",
+};

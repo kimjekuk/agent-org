@@ -13,7 +13,7 @@ export async function dismissBriefing() {
   const org = await getCurrentOrg(user.id);
   await getDb().transaction(async (tx) => {
     await tx.update(schema.users).set({ briefingSeenAt: new Date() }).where(eq(schema.users.id, user.id));
-    await writeAudit(tx, { orgId: org?.id ?? null, actorType: "USER", actorId: user.id, action: "briefing.dismiss", targetType: "user", targetId: user.id, reasoning: "출근 브리핑을 읽고 닫았습니다" });
+    await writeAudit(tx, { orgId: org?.id ?? null, actorType: "USER", actorId: user.id, action: "briefing.dismiss", targetType: "user", targetId: user.id, reasoning: "출근 브리핑을 읽고 닫았습니다" }); // i18n-ignore
   });
   revalidatePath("/dashboard");
 }

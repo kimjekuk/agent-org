@@ -4,6 +4,7 @@ import { asc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { RANK_LABEL, isRestTime, statusBadge } from "@/lib/agents";
+import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { button, card } from "@/lib/ui";
@@ -17,16 +18,18 @@ const RANK_ORDER = { LEADER: 0, MANAGER: 1, MEMBER: 2 } as const;
 // F005 에이전트 목록·채용
 export default async function AgentsPage() {
   const user = await requireUser();
+  const t = await getT();
   const org = await getCurrentOrg(user.id);
   if (!org) {
+    const [before, after] = t("먼저 {settings}에서 조직을 만들어 주세요.").split("{settings}");
     return (
       <main className="mx-auto max-w-3xl p-4">
         <p className="text-sm">
-          먼저{" "}
+          {before}
           <Link href="/settings" className="underline">
-            설정
+            {t("설정")}
           </Link>
-          에서 조직을 만들어 주세요.
+          {after}
         </p>
       </main>
     );
@@ -38,24 +41,24 @@ export default async function AgentsPage() {
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pb-12">
-      <h1 className="text-xl font-bold">에이전트</h1>
+      <h1 className="text-xl font-bold">{t("에이전트")}</h1>
 
       {list.length === 0 && (
         <section className={`${card} flex flex-col gap-3`}>
-          <h2 className="font-semibold">첫 조직 템플릿 — 콘텐츠 제작팀</h2>
+          <h2 className="font-semibold">{t("첫 조직 템플릿 — 콘텐츠 제작팀")}</h2>
           <ul className="flex flex-col gap-2 text-sm">
-            {CONTENT_TEAM.map((t) => (
-              <li key={t.key} className="flex items-center gap-3">
-                <AgentAvatar avatar={t.avatar} size={36} label={t.name} />
+            {CONTENT_TEAM.map((m) => (
+              <li key={m.key} className="flex items-center gap-3">
+                <AgentAvatar avatar={m.avatar} size={36} label={m.name} />
                 <span>
-                  <b>{t.name}</b> · {t.title} — {t.skills.join(", ")}
+                  <b>{m.name}</b> · {t(m.title)} — {m.skills.map((s) => t(s)).join(", ")}
                 </span>
               </li>
             ))}
           </ul>
           <form action={hireContentTeam}>
             <button type="submit" className={`${button} w-full`}>
-              4명 한 번에 채용
+              {t("4명 한 번에 채용")}
             </button>
           </form>
         </section>
@@ -73,11 +76,11 @@ export default async function AgentsPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-semibold">{a.name}</span>
                     <span className="text-xs opacity-60">
-                      Lv.{a.level} · {RANK_LABEL[a.rank]}
+                      Lv.{a.level} · {t(RANK_LABEL[a.rank])}
                     </span>
-                    <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>
+                    <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{t(badge.label)}</span>
                   </div>
-                  <p className="truncate text-sm opacity-70">{skills.join(", ") || "특기 없음"}</p>
+                  <p className="truncate text-sm opacity-70">{skills.join(", ") || t("특기 없음")}</p>
                 </div>
               </Link>
             </li>
@@ -86,8 +89,8 @@ export default async function AgentsPage() {
       </ul>
 
       <section className={`${card} flex flex-col gap-3`}>
-        <h2 className="font-semibold">새로 채용</h2>
-        <HireForm templates={ROLE_TEMPLATES.map((t) => ({ key: t.key, title: t.title, name: t.name }))} />
+        <h2 className="font-semibold">{t("새로 채용")}</h2>
+        <HireForm templates={ROLE_TEMPLATES.map((r) => ({ key: r.key, title: t(r.title), name: r.name }))} />
       </section>
     </main>
   );

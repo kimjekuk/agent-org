@@ -1,7 +1,8 @@
 // 팀원 루프(member.ts)와 리더 루프(leader.ts)가 함께 쓰는 것들
+import { type AgentLanguage, isLanguage } from "@agentorg/shared/agents/language";
 import { writeAudit } from "@agentorg/shared/audit";
 import type { AnyDb } from "@agentorg/shared/db";
-import { type AgentStatus, agents, messages, missions } from "@agentorg/shared/db/schema";
+import { type AgentStatus, agents, messages, missions, organizations } from "@agentorg/shared/db/schema";
 import type { OrgEvent } from "@agentorg/shared/events";
 import type { LLMProvider } from "@agentorg/shared/llm/provider";
 import type { RunAgentJob } from "@agentorg/shared/queue";
@@ -67,4 +68,11 @@ export function missionBrief(m: Mission): string {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/** F209 에이전트 사용 언어: 에이전트에 정한 것, 없으면 조직 기본값, 그것도 없으면 한국어 */
+export async function agentLanguage(db: AnyDb, agent: { orgId: string; language?: string | null }): Promise<AgentLanguage> {
+  if (isLanguage(agent.language)) return agent.language;
+  const [org] = await db.select({ language: organizations.language }).from(organizations).where(eq(organizations.id, agent.orgId));
+  return isLanguage(org?.language) ? org.language : "ko";
 }

@@ -29,7 +29,7 @@ import { notifyOrgOwner } from "@agentorg/shared/push";
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
-import { type Agent, clip, type Deps, type Message, type Mission, missionBrief, preview, setStatus, titleOf } from "./common";
+import { type Agent, clip, type Deps, type Message, type Mission, missionBrief, preview, setStatus, titleOf, agentLanguage } from "./common";
 import { kickoffRunning, meetingTranscript } from "./meeting";
 
 type Task = typeof tasks.$inferSelect;
@@ -934,6 +934,7 @@ class Leader {
           role: `리더${skills.length ? ` (${skills.join(", ")})` : ""}`,
           personality: this.leader.personality,
           style: stylePrompt(this.leader),
+          language: await agentLanguage(this.db, this.leader),
           skills,
           instructions: [
             "- 미션을 Task로 나누고, 팀원의 결과를 검토하고, 최종 결과로 통합한다.",

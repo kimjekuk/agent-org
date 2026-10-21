@@ -11,7 +11,7 @@ import type { MissionMessagePayload } from "@agentorg/shared/missions";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { StopReason } from "../guards";
 import { buildSystemPrompt } from "../prompts/system";
-import { type Agent, clip, type Deps, type Message, type Mission, missionBrief, preview, setStatus } from "./common";
+import { type Agent, clip, type Deps, type Message, type Mission, missionBrief, preview, setStatus, agentLanguage } from "./common";
 
 export type Meeting = typeof meetings.$inferSelect;
 
@@ -76,6 +76,7 @@ export async function handleMeetingTurn(db: AnyDb, agent: Agent, mission: Missio
           role: `팀원${skills.length ? ` (${skills.join(", ")})` : ""}`,
           personality: agent.personality,
           style: stylePrompt(agent),
+          language: await agentLanguage(db, agent),
           skills,
           instructions: "- 회의에서 내 차례에 3~5문장으로 짧게 말한다. 앞 사람 말을 되풀이하지 않고, 사용자 답글이 있으면 먼저 반영한다.\n- 제목·목록 없이 말하듯 쓴다. 모르는 것은 지어내지 않는다.",
         }),

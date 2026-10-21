@@ -3,9 +3,9 @@ import type { MetadataRoute } from "next";
 // F017 PWA: 홈 화면 "앱 설치" (PRD 5장 F017)
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "AgentOrg — AI 에이전트 조직",
+    name: "AgentOrg — AI 에이전트 조직", // i18n-ignore (설치 앱 정보는 쿠키 없이 받아 캐시된다)
     short_name: "AgentOrg",
-    description: "AI 에이전트 조직에 지시하고, 승인하고, 결과를 받아 보세요",
+    description: "AI 에이전트 조직에 지시하고, 승인하고, 결과를 받아 보세요", // i18n-ignore
     lang: "ko",
     start_url: "/dashboard",
     scope: "/",

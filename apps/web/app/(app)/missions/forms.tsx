@@ -2,6 +2,7 @@
 
 import { AUTONOMY_HELP, AUTONOMY_LABEL, type Autonomy, OUTPUT_FORMATS } from "@agentorg/shared/missions";
 import { useActionState, useRef } from "react";
+import { useT } from "@/components/I18n";
 import { button, errorText, input } from "@/lib/ui";
 import { createMission, type FormState, replyMeeting, sendMissionNote, updateMissionSettings } from "./actions";
 
@@ -19,53 +20,56 @@ const AUTONOMIES = Object.keys(AUTONOMY_LABEL) as Autonomy[];
 /** F006 미션 생성 폼 — 필수는 주제 하나. 나머지는 기본값으로 바로 시작할 수 있다 */
 export function MissionForm({ leaders, defaultAutonomy }: { leaders: { id: string; name: string }[]; defaultAutonomy: Autonomy }) {
   const [state, action, pending] = useActionState(createMission, undefined);
+  const t = useT();
   return (
     <form action={action} className="flex flex-col gap-4">
       <label className={label}>
-        주제 (필수)
-        <input name="topic" required minLength={2} maxLength={200} placeholder="예: 2026년 숏폼 콘텐츠 트렌드" className={input} />
+        {t("주제 (필수)")}
+        <input name="topic" required minLength={2} maxLength={200} placeholder={t("예: 2026년 숏폼 콘텐츠 트렌드")} className={input} />
       </label>
       <label className={label}>
-        목표
-        <textarea name="goal" rows={2} maxLength={1000} placeholder="예: 다음 달 채널 기획에 쓸 근거 정리" className={textarea} />
+        {t("목표")}
+        <textarea name="goal" rows={2} maxLength={1000} placeholder={t("예: 다음 달 채널 기획에 쓸 근거 정리")} className={textarea} />
       </label>
       <label className={label}>
-        성공 기준 (한 줄에 하나)
-        <textarea name="criteria" rows={3} placeholder={"출처 3개 이상\nA4 1장 분량"} className={textarea} />
+        {t("성공 기준 (한 줄에 하나)")}
+        <textarea name="criteria" rows={3} placeholder={t("출처 3개 이상\nA4 1장 분량")} className={textarea} />
       </label>
       <div className="grid grid-cols-2 gap-3">
         <label className={label}>
-          산출물 형식
-          <select name="outputFormat" defaultValue="보고서" className={select}>
+          {t("산출물 형식")}
+          <select name="outputFormat" defaultValue={OUTPUT_FORMATS[0]} className={select}>
             {OUTPUT_FORMATS.map((f) => (
-              <option key={f}>{f}</option>
+              <option key={f} value={f}>
+                {t(f)}
+              </option>
             ))}
           </select>
         </label>
         <label className={label}>
-          우선순위
+          {t("우선순위")}
           <select name="priority" defaultValue="0" className={select}>
-            <option value="0">보통</option>
-            <option value="1">높음</option>
-            <option value="2">긴급</option>
+            <option value="0">{t("보통")}</option>
+            <option value="1">{t("높음")}</option>
+            <option value="2">{t("긴급")}</option>
           </select>
         </label>
         <label className={label}>
-          예산 한도 (원)
+          {t("예산 한도 (원)")}
           <input name="budgetLimit" type="number" inputMode="numeric" min={100} max={1000000} defaultValue={5000} className={input} />
         </label>
         <label className={label}>
-          마감
+          {t("마감")}
           <input name="deadline" type="date" className={input} />
         </label>
       </div>
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-1 text-sm font-semibold">자율성 수준</legend>
+        <legend className="mb-1 text-sm font-semibold">{t("자율성 수준")}</legend>
         {AUTONOMIES.map((a) => (
           <label key={a} className="flex min-h-11 items-center gap-3 rounded-lg border border-black/15 px-3 text-sm dark:border-white/15">
             <input type="radio" name="autonomy" value={a} defaultChecked={a === defaultAutonomy} className="size-5" />
             <span>
-              <b>{AUTONOMY_LABEL[a]}</b> — {AUTONOMY_HELP[a]}
+              <b>{t(AUTONOMY_LABEL[a])}</b> — {t(AUTONOMY_HELP[a])}
             </span>
           </label>
         ))}
@@ -73,13 +77,13 @@ export function MissionForm({ leaders, defaultAutonomy }: { leaders: { id: strin
       <label className="flex min-h-11 items-center gap-3 rounded-lg border border-black/15 px-3 text-sm dark:border-white/15">
         <input type="checkbox" name="meetings" defaultChecked={true} className="size-5" />
         <span>
-          <b>회의</b> — 시작 전 킥오프·끝난 뒤 회고 (팀원마다 AI 호출 1번씩 더)
+          <b>{t("회의")}</b> — {t("시작 전 킥오프·끝난 뒤 회고 (팀원마다 AI 호출 1번씩 더)")}
         </span>
       </label>
       <label className={label}>
-        담당 리더
+        {t("담당 리더")}
         <select name="leaderId" defaultValue="" className={select}>
-          <option value="">자동 지정 (리더 직급)</option>
+          <option value="">{t("자동 지정 (리더 직급)")}</option>
           {leaders.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}
@@ -88,11 +92,11 @@ export function MissionForm({ leaders, defaultAutonomy }: { leaders: { id: strin
         </select>
       </label>
       <label className={label}>
-        참고 자료 (URL·메모)
-        <textarea name="references" rows={3} maxLength={8000} placeholder="https://… 한 줄에 하나, 또는 참고할 내용" className={textarea} />
+        {t("참고 자료 (URL·메모)")}
+        <textarea name="references" rows={3} maxLength={8000} placeholder={t("https://… 한 줄에 하나, 또는 참고할 내용")} className={textarea} />
       </label>
       <button type="submit" disabled={pending} className={button}>
-        {pending ? "시작하는 중" : "미션 시작"}
+        {pending ? t("시작하는 중") : t("미션 시작")}
       </button>
       <Message state={state} />
     </form>
@@ -101,31 +105,32 @@ export function MissionForm({ leaders, defaultAutonomy }: { leaders: { id: strin
 
 export function MissionSettingsForm({ id, autonomy, budgetLimit, meetings }: { id: string; autonomy: Autonomy; budgetLimit: number; meetings: boolean }) {
   const [state, action, pending] = useActionState(updateMissionSettings, undefined);
+  const t = useT();
   return (
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="id" value={id} />
       <label className={label}>
-        자율성 수준
+        {t("자율성 수준")}
         <select name="autonomy" defaultValue={autonomy} className={select}>
           {AUTONOMIES.map((a) => (
             <option key={a} value={a}>
-              {AUTONOMY_LABEL[a]} — {AUTONOMY_HELP[a]}
+              {t(AUTONOMY_LABEL[a])} — {t(AUTONOMY_HELP[a])}
             </option>
           ))}
         </select>
       </label>
       <label className={label}>
-        예산 한도 (원)
+        {t("예산 한도 (원)")}
         <input name="budgetLimit" type="number" inputMode="numeric" min={0} max={1000000} defaultValue={budgetLimit} className={input} />
       </label>
       <label className="flex min-h-11 items-center gap-3 rounded-lg border border-black/15 px-3 text-sm dark:border-white/15">
         <input type="checkbox" name="meetings" defaultChecked={meetings} className="size-5" />
         <span>
-          <b>회의</b> — 시작 전 킥오프·끝난 뒤 회고 (팀원마다 AI 호출 1번씩 더)
+          <b>{t("회의")}</b> — {t("시작 전 킥오프·끝난 뒤 회고 (팀원마다 AI 호출 1번씩 더)")}
         </span>
       </label>
       <button type="submit" disabled={pending} className={button}>
-        저장
+        {t("저장")}
       </button>
       <Message state={state} />
     </form>
@@ -135,6 +140,7 @@ export function MissionSettingsForm({ id, autonomy, budgetLimit, meetings }: { i
 /** 미션 대화에 끼어들기 — 리더에게 전달 (화면 아래 고정) */
 export function NoteForm({ id, disabled }: { id: string; disabled?: boolean }) {
   const [state, action, pending] = useActionState(sendMissionNote, undefined);
+  const t = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
   return (
     <form
@@ -153,12 +159,12 @@ export function NoteForm({ id, disabled }: { id: string; disabled?: boolean }) {
           maxLength={2000}
           required
           disabled={disabled}
-          placeholder="리더에게 메시지 (예: 20대 시청자 위주로 봐 주세요)"
+          placeholder={t("리더에게 메시지 (예: 20대 시청자 위주로 봐 주세요)")}
           className={textarea}
-          aria-label="리더에게 메시지"
+          aria-label={t("리더에게 메시지")}
         />
         <button type="submit" disabled={pending || disabled} className={`${button} shrink-0`}>
-          {pending ? "보내는 중" : "보내기"}
+          {pending ? t("보내는 중") : t("보내기")}
         </button>
       </div>
       <Message state={state} />
@@ -169,6 +175,7 @@ export function NoteForm({ id, disabled }: { id: string; disabled?: boolean }) {
 /** F104 회의록 답글 — 진행 중이면 다음 발언·결론에, 끝난 회의면 리더가 결론을 다시 정리 */
 export function MeetingReplyForm({ missionId, meetingId, disabled }: { missionId: string; meetingId: string; disabled?: boolean }) {
   const [state, action, pending] = useActionState(replyMeeting, undefined);
+  const t = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
   return (
     <form
@@ -188,12 +195,12 @@ export function MeetingReplyForm({ missionId, meetingId, disabled }: { missionId
           maxLength={2000}
           required
           disabled={disabled}
-          placeholder="회의에 의견 남기기 (예: 20대 위주로 봐 주세요)"
+          placeholder={t("회의에 의견 남기기 (예: 20대 위주로 봐 주세요)")}
           className={textarea}
-          aria-label="회의 답글"
+          aria-label={t("회의 답글")}
         />
         <button type="submit" disabled={pending || disabled} className={`${button} shrink-0`}>
-          {pending ? "남기는 중" : "답글"}
+          {pending ? t("남기는 중") : t("답글")}
         </button>
       </div>
       <Message state={state} />
