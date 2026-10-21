@@ -1,4 +1,5 @@
 import { getDb, schema } from "@agentorg/shared/db";
+import { CHANNEL_LABEL, isExportPayload } from "@agentorg/shared/export";
 import type { ApprovalPayload } from "@agentorg/shared/missions";
 import { and, asc, eq } from "drizzle-orm";
 import Link from "next/link";
@@ -7,7 +8,7 @@ import { approvalBadge, decisionLabels, waitingFor } from "@/lib/approvals";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { card } from "@/lib/ui";
-import { DecisionForm } from "../forms";
+import { DecisionForm, RetryExportForm } from "../forms";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,9 @@ export default async function ApprovalPage({ params }: { params: Promise<{ id: s
   if (!req) notFound();
 
   const p = (req.payload ?? {}) as ApprovalPayload;
+  // F205 외부 발송: 보낼 산출물도 함께 보여 준다
+  const exp = isExportPayload(req.payload) ? req.payload : null;
+  if (exp) p.artifactId = exp.artifactId;
   // F108 역제안을 승인해 시작한 미션
   const startedId = (req.payload as { missionId?: string } | null)?.missionId;
   const [[agent], [mission], [task], [artifact]] = await Promise.all([
@@ -57,7 +61,7 @@ export default async function ApprovalPage({ params }: { params: Promise<{ id: s
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className={`rounded-full px-2 py-0.5 font-semibold ${badge.className}`}>{badge.label}</span>
         <span className="opacity-70">
-          {agent?.name ?? "시스템"} · {timeFmt.format(req.createdAt)} · {open ? waitingFor(req.createdAt) : req.status === "APPROVED" ? "승인됨" : "거절됨"}
+          {agent?.name ?? (exp ? "내 요청" : "시스템")} · {timeFmt.format(req.createdAt)} · {open ? waitingFor(req.createdAt) : req.status === "APPROVED" ? "승인됨" : "거절됨"}
         </span>
       </div>
       <p className="whitespace-pre-wrap break-words font-semibold">{req.content}</p>
@@ -98,6 +102,18 @@ export default async function ApprovalPage({ params }: { params: Promise<{ id: s
           </summary>
           <div className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{artifact.content}</div>
         </details>
+      )}
+
+      {exp && (
+        <section className={`${card} flex flex-col gap-2 text-sm`} aria-label="발송">
+          <p>
+            <b>보낼 곳:</b> {CHANNEL_LABEL[exp.channel]}
+            {exp.to?.length ? ` — ${exp.to.join(", ")}` : ""}
+          </p>
+          {exp.sentAt && <p className="text-green-700 dark:text-green-400">✅ {timeFmt.format(new Date(exp.sentAt))}에 보냈습니다</p>}
+          {!exp.sentAt && exp.error && <p className="text-red-600 dark:text-red-400">⚠️ 보내지 못했습니다: {exp.error}</p>}
+          {!exp.sentAt && req.status === "APPROVED" && <RetryExportForm id={req.id} />}
+        </section>
       )}
 
       {open ? (

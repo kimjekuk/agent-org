@@ -42,7 +42,10 @@ export interface DecideInput {
  * (보류는 메시지 없이 그대로 두고 나중에 다시 결정할 수 있다).
  * 큐에 넣어야 할 에이전트가 있으면 돌려준다 (큐 등록은 호출한 쪽에서).
  */
-export async function decideApproval(db: AnyDb, input: DecideInput): Promise<{ error: string } | { notify: { orgId: string; agentId: string } | null }> {
+export async function decideApproval(
+  db: AnyDb,
+  input: DecideInput,
+): Promise<{ error: string } | { notify: { orgId: string; agentId: string } | null; /** F205: 승인된 외부 발송 — 호출한 쪽에서 runExport로 보낸다 */ exportApproved?: boolean }> {
   const [req] = await db
     .select()
     .from(approvalRequests)
@@ -145,6 +148,8 @@ export async function decideApproval(db: AnyDb, input: DecideInput): Promise<{ e
       }
       return { notify: null };
     }
+    // F205 외부 발송: 승인되면 호출한 쪽이 보낸다 (네트워크 발송은 트랜잭션 밖에서)
+    if (req.type === "EXTERNAL" && (req.payload as { kind?: string } | null)?.kind === "EXPORT") return { notify: null, exportApproved: input.decision === "APPROVED" };
     // 예산 초과 등: 승인하면 멈춘 에이전트가 남은 일을 다시 시도한다 (한도를 늘리지 않았으면 다시 멈춤)
     return { notify: input.decision === "APPROVED" && req.agentId ? { orgId: input.orgId, agentId: req.agentId } : null };
   });

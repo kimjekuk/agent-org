@@ -37,6 +37,7 @@ export function decisionLabels(req: Pick<Approval, "type" | "payload">): { appro
   if (req.type === "QUESTION") return { approve: "다시 시도", reject: "그대로 두기", help: "승인하면 리더가 실패한 일을 다시 처리합니다." };
   if (req.type === "PROPOSAL" && (req.payload as { kind?: string } | null)?.kind === "MISSION_PROPOSAL")
     return { approve: "미션 시작", reject: "하지 않음", help: "승인하면 이 내용으로 바로 미션을 시작합니다 (자율성은 조직 기본값, 예산 5,000원). 코멘트는 리더에게 '사용자 의견'으로 전달됩니다. 보류하면 보류 목록에 남습니다." };
+  if (req.type === "EXTERNAL") return { approve: "보내기", reject: "안 보냄", help: "'보내기'를 누르면 바로 바깥(이메일·슬랙)으로 보냅니다. 보낸 뒤에는 되돌릴 수 없습니다." };
   if (req.type === "BUDGET")
     return { approve: "계속 진행", reject: "멈춤 유지", help: "한도를 늘리지 않고 계속하면 바로 다시 멈춥니다. 미션 화면의 '자율성 · 예산 변경' 또는 에이전트 프로필에서 먼저 한도를 늘려 주세요." };
   return { approve: "승인", reject: "거절", help: "" };

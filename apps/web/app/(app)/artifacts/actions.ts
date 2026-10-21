@@ -3,6 +3,8 @@
 // F011 산출물: 평가(1~5) · 이전 버전으로 되돌리기(새 버전으로 복사). 변경은 AuditLog에 기록
 import { writeAudit } from "@agentorg/shared/audit";
 import { getDb, schema } from "@agentorg/shared/db";
+import { publishOrgEvent } from "@agentorg/shared/events";
+import { EXPORT_CHANNELS, type ExportChannel, requestExport } from "@agentorg/shared/export";
 import { awardXp, ratingBonus } from "@agentorg/shared/growth";
 import { addArtifactToKnowledge, KNOWLEDGE_MIN_RATING } from "@agentorg/shared/knowledge";
 import { and, eq } from "drizzle-orm";
@@ -76,4 +78,20 @@ export async function revertArtifact(form: FormData) {
     return c;
   });
   redirect(`/artifacts/${copy.id}`);
+}
+
+// ── F205 보내기: 승인함에 외부 발송 요청을 올린다 (승인해야 실제로 보낸다) ──
+
+export type ExportState = { error?: string; approvalId?: string; existing?: boolean } | undefined;
+
+export async function requestExportAction(_prev: ExportState, form: FormData): Promise<ExportState> {
+  const { user, org, art } = await context(form);
+  if (!art) return { error: "산출물을 찾을 수 없습니다" };
+  const channel = String(form.get("channel"));
+  if (!(EXPORT_CHANNELS as readonly string[]).includes(channel)) return { error: "보낼 곳을 골라 주세요" };
+  const r = await requestExport(getDb(), { orgId: org.id, userId: user.id, artifactId: art.id, channel: channel as ExportChannel, to: String(form.get("to") ?? "") });
+  if ("error" in r) return { error: r.error };
+  if (!r.existing) await publishOrgEvent(org.id, { type: "approval" });
+  revalidatePath("/approvals");
+  return { approvalId: r.approvalId, existing: r.existing };
 }
