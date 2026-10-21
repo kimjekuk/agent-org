@@ -16,6 +16,7 @@ export const SIDEBAR = [
   { href: "/missions", label: "미션", icon: "🎯" },
   { href: "/artifacts", label: "산출물", icon: "📄" },
   { href: "/stats", label: "통계", icon: "📊" },
+  { href: "/history", label: "연표", icon: "🗓️" },
   { href: "/knowledge", label: "지식", icon: "📚" },
   { href: "/schedules", label: "예약", icon: "⏰" },
   { href: "/approvals", label: "승인함", icon: "✋" },
@@ -24,7 +25,7 @@ export const SIDEBAR = [
 ];
 
 /** 더보기 탭은 하단 탭바에 없는 화면들을 모두 포함한다 */
-export const MORE_PATHS = ["/more", "/office", "/org", "/artifacts", "/stats", "/knowledge", "/schedules", "/audit", "/settings"];
+export const MORE_PATHS = ["/more", "/office", "/org", "/artifacts", "/stats", "/history", "/knowledge", "/schedules", "/audit", "/settings"];
 
 /** 더보기 화면의 메뉴 (하단 탭바에 없는 것들) */
 export const MORE_LINKS = SIDEBAR.filter((s) => !TABS.some((t) => t.href === s.href));
