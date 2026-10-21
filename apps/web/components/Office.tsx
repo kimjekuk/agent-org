@@ -37,7 +37,22 @@ const CSS = `
   .office-agent { transition: none } .office-typing .office-arms, .office-dot, .office-alert, .office-idle { animation: none }
 }`;
 
-export function Office({ agents, deskCount, full = false, theme }: { agents: OfficeAgent[]; deskCount: number; full?: boolean; theme?: string | null }) {
+/** readOnly = 리플레이처럼 보기만 (캐릭터를 눌러도 카드가 열리지 않음). speed = 이동 애니메이션 배속 */
+export function Office({
+  agents,
+  deskCount,
+  full = false,
+  theme,
+  readOnly = false,
+  speed = 1,
+}: {
+  agents: OfficeAgent[];
+  deskCount: number;
+  full?: boolean;
+  theme?: string | null;
+  readOnly?: boolean;
+  speed?: number;
+}) {
   const t = officeTheme(theme);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -80,7 +95,7 @@ export function Office({ agents, deskCount, full = false, theme }: { agents: Off
           ))}
           <Lounge t={t} />
           {agents.map((a) => (
-            <Character key={a.id} agent={a} selected={a.id === selectedId} onSelect={() => setSelectedId(a.id)} />
+            <Character key={a.id} agent={a} selected={a.id === selectedId} onSelect={() => !readOnly && setSelectedId(a.id)} moveSeconds={1.6 / speed} />
           ))}
         </svg>
       </div>
@@ -275,7 +290,7 @@ function Plant({ x, y }: { x: number; y: number }) {
 
 // ── 캐릭터 ─────────────────────────────────────────────
 
-function Character({ agent, selected, onSelect }: { agent: OfficeAgent; selected: boolean; onSelect: () => void }) {
+function Character({ agent, selected, onSelect, moveSeconds }: { agent: OfficeAgent; selected: boolean; onSelect: () => void; moveSeconds: number }) {
   const { x, y } = agent.place.at;
   const look = levelLook(agent.level);
   const typing = agent.status === "WORKING" && agent.activity === "WORK";
@@ -284,7 +299,7 @@ function Character({ agent, selected, onSelect }: { agent: OfficeAgent; selected
   return (
     <g
       className={`office-agent ${typing ? "office-typing" : ""}`}
-      style={{ transform: `translate(${x}px, ${y}px)` }}
+      style={{ transform: `translate(${x}px, ${y}px)`, transitionDuration: `${moveSeconds}s` }}
       role="button"
       tabIndex={0}
       aria-label={`${agent.name} — ${agent.badge.label}`}

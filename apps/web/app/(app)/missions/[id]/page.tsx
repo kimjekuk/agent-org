@@ -12,6 +12,8 @@ import { requireUser } from "@/lib/session";
 import { buttonDanger, buttonGhost, card } from "@/lib/ui";
 import { cancelMission, moveTask, pauseMission, resumeMission } from "../actions";
 import { MeetingReplyForm, MissionSettingsForm, NoteForm } from "../forms";
+import { ReplayPlayer } from "@/components/ReplayPlayer";
+import { missionReplay } from "@agentorg/shared/replay";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,7 @@ const TABS = [
   { key: "board", label: "보드" },
   { key: "log", label: "대화" },
   { key: "meetings", label: "회의" },
+  { key: "replay", label: "리플레이" },
   { key: "artifacts", label: "산출물" },
   { key: "cost", label: "비용" },
 ] as const;
@@ -183,13 +186,13 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
         </section>
       )}
 
-      <nav className="flex gap-1 border-b border-black/10 px-2 dark:border-white/15" aria-label="미션 탭">
+      <nav className="flex gap-1 overflow-x-auto border-b border-black/10 px-2 dark:border-white/15" aria-label="미션 탭">
         {TABS.map((t) => (
           <Link
             key={t.key}
             href={`/missions/${mission.id}?tab=${t.key}`}
             scroll={false}
-            className={`flex h-11 flex-1 items-center justify-center text-sm font-semibold ${tab === t.key ? "border-b-2 border-foreground" : "opacity-60"}`}
+            className={`flex h-11 flex-1 shrink-0 items-center justify-center whitespace-nowrap px-2 text-sm font-semibold ${tab === t.key ? "border-b-2 border-foreground" : "opacity-60"}`}
           >
             {t.label}
           </Link>
@@ -289,6 +292,7 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
 
       {tab === "log" && <MissionLog missionId={mission.id} agentById={agentById} closed={mission.status === "CANCELLED"} />}
       {tab === "meetings" && <MissionMeetings missionId={mission.id} agentById={agentById} enabled={mission.meetings} cancelled={mission.status === "CANCELLED"} />}
+      {tab === "replay" && <MissionReplay orgId={org.id} missionId={mission.id} theme={org.officeTheme} />}
       {tab === "artifacts" && <MissionArtifacts missionId={mission.id} agentById={agentById} taskTitles={new Map(taskList.map((t) => [t.id, t.title]))} />}
       {tab === "cost" && <MissionCost missionId={mission.id} agentById={agentById} used={used} limit={mission.budgetLimit} />}
     </main>
@@ -429,6 +433,17 @@ async function MissionMeetings({ missionId, agentById, enabled, cancelled }: { m
           </article>
         );
       })}
+    </section>
+  );
+}
+
+/** F204 리플레이: 감사 로그로 만든 장면을 사무실 화면에서 재생 */
+async function MissionReplay({ orgId, missionId, theme }: { orgId: string; missionId: string; theme: string }) {
+  const r = await missionReplay(getDb(), orgId, missionId);
+  if (!r) return null;
+  return (
+    <section className="flex flex-col gap-2 px-4 pb-12" aria-label="리플레이">
+      <ReplayPlayer agents={r.agents} frames={r.frames.map((f) => ({ ...f, at: f.at.toISOString() }))} theme={theme} />
     </section>
   );
 }

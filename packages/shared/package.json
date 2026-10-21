@@ -33,7 +33,9 @@
     "./meetings": "./src/meetings.ts",
     "./proposals": "./src/proposals.ts",
     "./office": "./src/office.ts",
-    "./stats": "./src/stats.ts"
+    "./stats": "./src/stats.ts",
+    "./replay": "./src/replay.ts",
+    "./history": "./src/history.ts"
   },
   "scripts": {
     "typecheck": "tsc",
