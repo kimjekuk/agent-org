@@ -265,6 +265,20 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   createdAt: createdAt(),
 });
 
+// F205 내보내기 연결 (조직마다 종류별 1개): 설정은 ENCRYPTION_KEY로 암호화, label은 화면에 보여 줄 가린 요약
+export const exportChannels = pgTable(
+  "export_channels",
+  {
+    id: id(),
+    orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // EMAIL | SLACK
+    encryptedConfig: text("encrypted_config").notNull(),
+    label: text("label").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [unique().on(t.orgId, t.kind)],
+);
+
 // 앱이 스스로 만들어 쓰는 비밀값 (예: 웹 푸시 VAPID 키). 값은 ENCRYPTION_KEY로 암호화해 저장한다
 export const appSecrets = pgTable("app_secrets", {
   name: text("name").primaryKey(),

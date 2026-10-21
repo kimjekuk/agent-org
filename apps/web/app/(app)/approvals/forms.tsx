@@ -3,7 +3,7 @@
 import type { ApprovalDecision } from "@agentorg/shared/approval";
 import { useActionState } from "react";
 import { button, buttonDanger, buttonGhost, errorText, input } from "@/lib/ui";
-import { decide, type FormState } from "./actions";
+import { decide, type FormState, retryExport } from "./actions";
 
 function Message({ state }: { state: FormState }) {
   if (state?.error) return <p className={errorText}>{state.error}</p>;
@@ -38,6 +38,21 @@ export function DecisionForm({ id, approveLabel, rejectLabel }: { id: string; ap
           보류
         </button>
       </div>
+      <Message state={state} />
+    </form>
+  );
+}
+
+/** F205 발송 실패 → 다시 보내기 */
+export function RetryExportForm({ id }: { id: string }) {
+  const [state, action, pending] = useActionState(retryExport, undefined);
+  if (state?.ok) return <Message state={state} />;
+  return (
+    <form action={action} className="flex flex-col gap-2">
+      <input type="hidden" name="id" value={id} />
+      <button type="submit" disabled={pending} className={button}>
+        {pending ? "보내는 중…" : "다시 보내기"}
+      </button>
       <Message state={state} />
     </form>
   );

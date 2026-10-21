@@ -35,7 +35,8 @@
     "./office": "./src/office.ts",
     "./stats": "./src/stats.ts",
     "./replay": "./src/replay.ts",
-    "./history": "./src/history.ts"
+    "./history": "./src/history.ts",
+    "./export": "./src/export.ts"
   },
   "scripts": {
     "typecheck": "tsc",
@@ -47,12 +48,14 @@
     "bullmq": "^5.81.5",
     "drizzle-orm": "0.45.4",
     "ioredis": "^5.11.1",
+    "nodemailer": "^7.0.13",
     "postgres": "3.4.9",
     "web-push": "3.6.7"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.10",
     "@types/node": "^20.19.43",
+    "@types/nodemailer": "^8.0.2",
     "@types/web-push": "^3.6.4",
     "drizzle-kit": "0.31.11",
     "vitest": "^3.2.7"

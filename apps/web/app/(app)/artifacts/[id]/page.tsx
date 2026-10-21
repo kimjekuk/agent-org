@@ -1,4 +1,5 @@
 import { getDb, schema } from "@agentorg/shared/db";
+import { isFinalResult, listExportChannels } from "@agentorg/shared/export";
 import { artifactSourceKey } from "@agentorg/shared/knowledge";
 import { and, eq } from "drizzle-orm";
 import Link from "next/link";
@@ -9,6 +10,7 @@ import { requireUser } from "@/lib/session";
 import { buttonGhost, card } from "@/lib/ui";
 import { addArtifact } from "../../knowledge/actions";
 import { rateArtifact, revertArtifact } from "../actions";
+import { ExportForm } from "./ExportForm";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,8 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
       .where(and(eq(schema.knowledgeDocs.orgId, org.id), eq(schema.knowledgeDocs.sourceKey, artifactSourceKey(art)))),
   ]);
   const latest = versions[0];
+  // F205 미션 최종 결과만 바깥으로 보낼 수 있다
+  const channels = isFinalResult(art) ? await listExportChannels(db, org.id) : null;
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pb-12">
@@ -82,6 +86,25 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
             📚 {wiki ? "이 버전으로 지식 베이스 고치기" : "지식 베이스에 넣기"}
           </button>
         </form>
+      )}
+
+      {channels && (
+        <details className={card}>
+          <summary className="cursor-pointer font-semibold">📤 보내기 (이메일·슬랙)</summary>
+          <div className="mt-3">
+            {channels.length > 0 ? (
+              <ExportForm artifactId={art.id} channels={channels} />
+            ) : (
+              <p className="text-sm opacity-80">
+                아직 연결된 곳이 없습니다.{" "}
+                <Link href="/settings#export" className="font-semibold underline">
+                  설정 → 내보내기 연결
+                </Link>
+                에서 이메일이나 슬랙을 먼저 등록해 주세요.
+              </p>
+            )}
+          </div>
+        </details>
       )}
 
       <article className={`${card} whitespace-pre-wrap break-words text-sm leading-relaxed`}>{art.content}</article>

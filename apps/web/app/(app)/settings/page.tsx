@@ -10,6 +10,9 @@ import { ApiKeyForm, CreateOrgForm, RenameOrgForm, TestConnectionForm } from "./
 import { saveBudgetDaily, saveFallbackModel, saveOfficeTheme, toggleModel } from "./model-actions";
 import { OFFICE_THEMES, type OfficeTheme } from "@agentorg/shared/agents/templates";
 import { DeleteModelForm, ModelForm } from "./model-forms";
+import { listExportChannels } from "@agentorg/shared/export";
+import { deleteChannel } from "./export-actions";
+import { EmailChannelForm, SlackChannelForm } from "./export-forms";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +35,7 @@ export default async function SettingsPage() {
   const currentOrgId = currentOrg?.id;
   const models = await db.select().from(schema.llmModels).orderBy(asc(schema.llmModels.provider), asc(schema.llmModels.label));
   const modelChoices = await listModelChoices(db);
+  const exportChannels = currentOrg ? await listExportChannels(db, currentOrg.id) : [];
   const providerOptions = PROVIDERS.filter((p) => p !== "anthropic").map((p) => ({ value: p, label: PROVIDER_LABEL[p] }));
 
   return (
@@ -179,6 +183,42 @@ export default async function SettingsPage() {
               저장
             </button>
           </form>
+        </section>
+      )}
+
+      {currentOrg && (
+        <section id="export" className="flex scroll-mt-4 flex-col gap-3" aria-label="내보내기 연결">
+          <h2 className="px-1 font-semibold">내보내기 연결</h2>
+          <p className="px-1 text-sm opacity-70">미션 최종 결과 화면의 &lsquo;보내기&rsquo;로 쓸 곳입니다. 보낼 때마다 승인함에서 승인해야 나갑니다. 비밀번호·웹훅 주소는 암호화해서 저장하고 다시 보여주지 않습니다.</p>
+          {(
+            [
+              ["SLACK", "💬 슬랙", "슬랙 앱 설정 → Incoming Webhooks → 채널을 골라 만든 주소를 붙여 넣으세요."],
+              ["EMAIL", "✉️ 이메일", "Gmail은 Google 계정 → 보안 → 2단계 인증을 켠 뒤 '앱 비밀번호'를 만들어 넣으세요."],
+            ] as const
+          ).map(([kind, title, help]) => {
+            const ch = exportChannels.find((c) => c.kind === kind);
+            return (
+              <details key={kind} className={card}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-semibold">
+                  {title}
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${ch ? "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200" : "bg-black/10 dark:bg-white/15"}`}>{ch ? "연결됨" : "미연결"}</span>
+                </summary>
+                <div className="mt-3 flex flex-col gap-2">
+                  {ch && <p className="break-all text-sm opacity-80">{ch.label}</p>}
+                  <p className="text-xs opacity-70">{help}</p>
+                  {kind === "SLACK" ? <SlackChannelForm registered={Boolean(ch)} /> : <EmailChannelForm registered={Boolean(ch)} />}
+                  {ch && (
+                    <form action={deleteChannel}>
+                      <input type="hidden" name="kind" value={kind} />
+                      <button type="submit" className={`${buttonGhost} w-full text-red-600 dark:text-red-400`}>
+                        연결 삭제
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </details>
+            );
+          })}
         </section>
       )}
 
