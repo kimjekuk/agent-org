@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { type FormState, sendDirective } from "@/app/(app)/agents/actions";
 import { AgentAvatar } from "@/components/AgentAvatar";
+import { useT } from "@/components/I18n";
 import { PixelSprite } from "@/components/PixelSprite";
 import type { OfficeAgent } from "@/lib/office";
 import { button, errorText, input } from "@/lib/ui";
@@ -54,6 +55,7 @@ export function Office({
   speed?: number;
 }) {
   const t = officeTheme(theme);
+  const tr = useT();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const selected = agents.find((a) => a.id === selectedId) ?? null;
@@ -64,7 +66,7 @@ export function Office({
     <div className="flex flex-col gap-2">
       {full && (
         <div className="flex items-center gap-2 text-sm">
-          <span className="opacity-70">확대</span>
+          <span className="opacity-70">{tr("확대")}</span>
           {[1, 1.5, 2, 3].map((z) => (
             <button
               key={z}
@@ -83,7 +85,7 @@ export function Office({
           style={{ width: `${zoom * 100}%`, display: "block", imageRendering: "pixelated" }}
           shapeRendering="crispEdges"
           role="img"
-          aria-label={`사무실: ${agents.map((a) => `${a.name} ${a.badge.label}`).join(", ") || "에이전트 없음"}`}
+          aria-label={tr("사무실: {list}", { list: agents.map((a) => `${a.name} ${tr(a.badge.label)}`).join(", ") || tr("에이전트 없음") })}
         >
           <style>{CSS}</style>
           <Floor t={t} />
@@ -136,6 +138,7 @@ function Floor({ t }: { t: Theme }) {
 }
 
 function LeaderRoom({ working, t }: { working: boolean; t: Theme }) {
+  const tr = useT();
   const r = ROOMS.leader;
   return (
     <g>
@@ -159,13 +162,14 @@ function LeaderRoom({ working, t }: { working: boolean; t: Theme }) {
         <rect key={c} x={9 + i * 4} y={19} width={3} height={7} fill={c} />
       ))}
       <text x={78} y={14} fontSize={6} textAnchor="middle" fill={t.text}>
-        리더
+        {tr("리더")}
       </text>
     </g>
   );
 }
 
 function MeetingRoom({ t }: { t: Theme }) {
+  const tr = useT();
   const tb = MEETING_TABLE;
   return (
     <g>
@@ -183,13 +187,14 @@ function MeetingRoom({ t }: { t: Theme }) {
       <rect x={tb.x + 10} y={tb.y + 8} width={8} height={6} fill="#F5F5F4" />
       <rect x={tb.x + 40} y={tb.y + 9} width={6} height={4} fill="#93C5FD" />
       <text x={110} y={14} fontSize={6} fill={t.text}>
-        회의실
+        {tr("회의실")}
       </text>
     </g>
   );
 }
 
 function Pantry({ t }: { t: Theme }) {
+  const tr = useT();
   return (
     <g>
       <rect x={220} y={4} width={96} height={84} fill={t.pantry} />
@@ -213,7 +218,7 @@ function Pantry({ t }: { t: Theme }) {
       <rect x={262} y={54} width={6} height={6} fill="#6B7280" />
       <Plant x={300} y={70} />
       <text x={268} y={86} fontSize={6} textAnchor="middle" fill={t.text}>
-        탕비실
+        {tr("탕비실")}
       </text>
     </g>
   );
@@ -246,6 +251,7 @@ function Monitor({ x, y, on }: { x: number; y: number; on: boolean }) {
 }
 
 function Lounge({ t }: { t: Theme }) {
+  const tr = useT();
   return (
     <g>
       {/* 러그 */}
@@ -272,7 +278,7 @@ function Lounge({ t }: { t: Theme }) {
       <Plant x={240} y={236} />
       <Plant x={6} y={238} />
       <text x={60} y={250} fontSize={6} textAnchor="middle" fill={t.text}>
-        휴게 공간
+        {tr("휴게 공간")}
       </text>
     </g>
   );
@@ -291,6 +297,7 @@ function Plant({ x, y }: { x: number; y: number }) {
 // ── 캐릭터 ─────────────────────────────────────────────
 
 function Character({ agent, selected, onSelect, moveSeconds }: { agent: OfficeAgent; selected: boolean; onSelect: () => void; moveSeconds: number }) {
+  const tr = useT();
   const { x, y } = agent.place.at;
   const look = levelLook(agent.level);
   const typing = agent.status === "WORKING" && agent.activity === "WORK";
@@ -302,7 +309,7 @@ function Character({ agent, selected, onSelect, moveSeconds }: { agent: OfficeAg
       style={{ transform: `translate(${x}px, ${y}px)`, transitionDuration: `${moveSeconds}s` }}
       role="button"
       tabIndex={0}
-      aria-label={`${agent.name} — ${agent.badge.label}`}
+      aria-label={`${agent.name} — ${tr(agent.badge.label)}`}
       onClick={onSelect}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -372,6 +379,7 @@ function Emoji({ at, text }: { at: { x: number; y: number }; text: string }) {
 // ── 누르면 올라오는 카드: 상태·지금 하는 일·바로 지시·프로필 ─────────────────
 
 function AgentSheet({ agent, onClose }: { agent: OfficeAgent; onClose: () => void }) {
+  const tr = useT();
   const [state, action, pending] = useActionState<FormState, FormData>(sendDirective, undefined);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -383,7 +391,7 @@ function AgentSheet({ agent, onClose }: { agent: OfficeAgent; onClose: () => voi
   return (
     <div
       role="dialog"
-      aria-label={`${agent.name} 카드`}
+      aria-label={tr("{name} 카드", { name: agent.name })}
       className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-50 mx-auto max-w-3xl rounded-t-2xl border border-black/10 bg-background p-4 shadow-2xl md:bottom-0 dark:border-white/15"
     >
       <div className="flex items-start gap-3">
@@ -392,13 +400,13 @@ function AgentSheet({ agent, onClose }: { agent: OfficeAgent; onClose: () => voi
           <p className="font-semibold">
             {agent.name}{" "}
             <span className="text-xs font-normal opacity-60">
-              Lv.{agent.level} {agent.rankLabel}
+              Lv.{agent.level} {tr(agent.rankLabel)}
             </span>
           </p>
-          <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${agent.badge.className}`}>{agent.badge.label}</span>
+          <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${agent.badge.className}`}>{tr(agent.badge.label)}</span>
           {agent.doing && <p className="mt-1 break-words text-sm opacity-80">{agent.doing}</p>}
         </div>
-        <button type="button" onClick={onClose} className="h-11 w-11 shrink-0 rounded-lg bg-black/5 text-lg dark:bg-white/10" aria-label="닫기">
+        <button type="button" onClick={onClose} className="h-11 w-11 shrink-0 rounded-lg bg-black/5 text-lg dark:bg-white/10" aria-label={tr("닫기")}>
           ✕
         </button>
       </div>
@@ -417,19 +425,19 @@ function AgentSheet({ agent, onClose }: { agent: OfficeAgent; onClose: () => voi
             rows={2}
             maxLength={4000}
             required
-            placeholder={`${agent.name}에게 지시`}
+            placeholder={tr("{name}에게 지시", { name: agent.name })}
             className={`${input} h-auto min-h-11 py-2`}
-            aria-label={`${agent.name}에게 지시`}
+            aria-label={tr("{name}에게 지시", { name: agent.name })}
           />
           <button type="submit" disabled={pending} className={`${button} shrink-0`}>
-            {pending ? "보내는 중" : "지시"}
+            {pending ? tr("보내는 중") : tr("지시")}
           </button>
         </div>
         {state?.error && <p className={errorText}>{state.error}</p>}
         {state?.ok && <p className="text-sm text-green-700 dark:text-green-400">{state.ok}</p>}
       </form>
       <Link href={`/agents/${agent.id}`} className="mt-2 flex h-11 items-center justify-center rounded-lg bg-black/5 text-sm font-semibold dark:bg-white/10">
-        프로필·대화 보기 ›
+        {tr("프로필·대화 보기 ›")}
       </Link>
     </div>
   );

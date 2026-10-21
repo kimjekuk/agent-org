@@ -17,7 +17,7 @@ export async function saveLocale(form: FormData) {
   if (!isLocale(locale)) return;
   await getDb().transaction(async (tx) => {
     await tx.update(schema.users).set({ locale }).where(eq(schema.users.id, user.id));
-    await writeAudit(tx, { actorType: "USER", actorId: user.id, action: "user.locale", targetType: "user", targetId: user.id, reasoning: `화면 언어 → ${LOCALES[locale]}` });
+    await writeAudit(tx, { actorType: "USER", actorId: user.id, action: "user.locale", targetType: "user", targetId: user.id, reasoning: `화면 언어 → ${LOCALES[locale]}` }); // i18n-ignore
   });
   (await cookies()).set(LOCALE_COOKIE, locale, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
   revalidatePath("/", "layout");
@@ -38,7 +38,7 @@ export async function saveOrgLanguage(form: FormData) {
       action: "org.language",
       targetType: "organization",
       targetId: org.id,
-      reasoning: `에이전트 기본 사용 언어 → ${LANGUAGES[language].label}`,
+      reasoning: `에이전트 기본 사용 언어 → ${LANGUAGES[language].label}`, // i18n-ignore
     });
   });
   revalidatePath("/settings");

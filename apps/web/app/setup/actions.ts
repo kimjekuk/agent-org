@@ -5,6 +5,7 @@ import { getDb, schema } from "@agentorg/shared/db";
 import { hashPassword } from "@agentorg/shared/password";
 import { sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { getT } from "@/lib/i18n";
 
 const SETUP_LOCK = 4201; // 동시에 두 계정이 만들어지지 않도록 하는 advisory lock 번호
 
@@ -13,9 +14,10 @@ export async function createFirstUser(_prev: string | undefined, form: FormData)
   const password = String(form.get("password") ?? "");
   const confirm = String(form.get("confirm") ?? "");
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "이메일 형식이 올바르지 않습니다";
-  if (password.length < 8) return "비밀번호는 8자 이상이어야 합니다";
-  if (password !== confirm) return "비밀번호 확인이 일치하지 않습니다";
+  const t = await getT();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return t("이메일 형식이 올바르지 않습니다");
+  if (password.length < 8) return t("비밀번호는 8자 이상이어야 합니다");
+  if (password !== confirm) return t("비밀번호 확인이 일치하지 않습니다");
 
   const passwordHash = await hashPassword(password);
   const created = await getDb().transaction(async (tx) => {
@@ -29,7 +31,7 @@ export async function createFirstUser(_prev: string | undefined, form: FormData)
       action: "user.setup",
       targetType: "user",
       targetId: user.id,
-      reasoning: "첫 관리자 계정 생성 (/setup)",
+      reasoning: "첫 관리자 계정 생성 (/setup)", // i18n-ignore
     });
     return true;
   });

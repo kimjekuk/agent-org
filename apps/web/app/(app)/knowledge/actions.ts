@@ -7,6 +7,7 @@ import { addArtifactToKnowledge, saveKnowledgeDoc } from "@agentorg/shared/knowl
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 
@@ -27,13 +28,14 @@ export async function saveDoc(_prev: KnowledgeFormState, form: FormData): Promis
   const title = String(form.get("title") ?? "").trim();
   const content = String(form.get("content") ?? "").trim();
   const tags = String(form.get("tags") ?? "").split(/[,#\n]/);
-  if (!title) return { error: "제목을 입력해 주세요" };
-  if (!content) return { error: "내용을 입력해 주세요" };
+  const t = await getT();
+  if (!title) return { error: t("제목을 입력해 주세요") };
+  if (!content) return { error: t("내용을 입력해 주세요") };
   let docId: string;
   try {
     docId = await saveKnowledgeDoc(getDb(), { orgId: org.id, userId: user.id, id: UUID.test(id) ? id : null, title, content, tags });
   } catch (e) {
-    return { error: (e as Error).message };
+    return { error: t((e as Error).message) };
   }
   revalidatePath("/knowledge");
   redirect(`/knowledge/${docId}`);
@@ -48,7 +50,7 @@ export async function deleteDoc(form: FormData) {
       .delete(schema.knowledgeDocs)
       .where(and(eq(schema.knowledgeDocs.id, id), eq(schema.knowledgeDocs.orgId, org.id)))
       .returning();
-    if (row) await writeAudit(tx, { orgId: org.id, actorType: "USER", actorId: user.id, action: "knowledge.delete", targetType: "knowledge_doc", targetId: id, reasoning: `"${row.title}" 삭제` });
+    if (row) await writeAudit(tx, { orgId: org.id, actorType: "USER", actorId: user.id, action: "knowledge.delete", targetType: "knowledge_doc", targetId: id, reasoning: `"${row.title}" 삭제` }); // i18n-ignore
   });
   revalidatePath("/knowledge");
   redirect("/knowledge");
@@ -64,7 +66,7 @@ export async function addArtifact(form: FormData) {
     .from(schema.artifacts)
     .where(and(eq(schema.artifacts.id, id), eq(schema.artifacts.orgId, org.id)));
   if (!art) return;
-  await addArtifactToKnowledge(getDb(), art, { type: "USER", id: user.id }, "사용자가 위키에 넣음");
+  await addArtifactToKnowledge(getDb(), art, { type: "USER", id: user.id }, "사용자가 위키에 넣음"); // i18n-ignore
   revalidatePath(`/artifacts/${art.id}`);
   revalidatePath("/knowledge");
 }

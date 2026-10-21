@@ -5,6 +5,7 @@ import { asc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { type Agent, RANK_LABEL, isRestTime, statusBadge } from "@/lib/agents";
+import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonGhost } from "@/lib/ui";
@@ -17,8 +18,9 @@ const RANK_ORDER = { LEADER: 0, MANAGER: 1, MEMBER: 2 } as const;
 // F004 조직도: 리더 → 팀장 → 팀원 트리. 노드를 탭하면 프로필 요약·상사/직급 변경·지시하기
 export default async function OrgPage() {
   const user = await requireUser();
+  const t = await getT();
   const org = await getCurrentOrg(user.id);
-  if (!org) return <main className="mx-auto max-w-3xl p-4 text-sm">먼저 설정에서 조직을 만들어 주세요.</main>;
+  if (!org) return <main className="mx-auto max-w-3xl p-4 text-sm">{t("먼저 설정에서 조직을 만들어 주세요.")}</main>;
   const all = await getDb().select().from(schema.agents).where(eq(schema.agents.orgId, org.id)).orderBy(asc(schema.agents.createdAt));
   const active = all.filter((a) => a.isActive);
   const ids = new Set(active.map((a) => a.id));
@@ -40,9 +42,9 @@ export default async function OrgPage() {
               <div className="flex items-center gap-2">
                 <span className="font-semibold">{agent.name}</span>
                 <span className="text-xs opacity-60">
-                  Lv.{agent.level} · {RANK_LABEL[agent.rank]}
+                  Lv.{agent.level} · {t(RANK_LABEL[agent.rank])}
                 </span>
-                <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{badge.label}</span>
+                <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>{t(badge.label)}</span>
               </div>
               <div className="mt-1 flex flex-wrap gap-1">
                 {skills.slice(0, 4).map((s) => (
@@ -56,24 +58,24 @@ export default async function OrgPage() {
           <div className="flex flex-col gap-3 border-t border-black/10 p-3 dark:border-white/15">
             {(agent.personality || isPersonalityType(agent.personalityType)) && (
               <p className="text-sm opacity-80">
-                성격: {isPersonalityType(agent.personalityType) ? `${PERSONALITY_TYPES[agent.personalityType].emoji} ${PERSONALITY_TYPES[agent.personalityType].label}` : ""}
+                {t("성격:")} {isPersonalityType(agent.personalityType) ? `${PERSONALITY_TYPES[agent.personalityType].emoji} ${t(PERSONALITY_TYPES[agent.personalityType].label)}` : ""}
                 {agent.personality && isPersonalityType(agent.personalityType) ? " · " : ""}
                 {agent.personality}
               </p>
             )}
             <div className="grid grid-cols-2 gap-2">
               <Link href={`/agents/${agent.id}#directive`} className={`${buttonGhost} flex items-center justify-center`}>
-                ✍️ 지시하기
+                ✍️ {t("지시하기")}
               </Link>
               <Link href={`/agents/${agent.id}`} className={`${buttonGhost} flex items-center justify-center`}>
-                프로필
+                {t("프로필")}
               </Link>
             </div>
             <PlacementForm
               id={agent.id}
               rank={agent.rank}
               supervisorId={agent.supervisorId}
-              candidates={active.filter((a) => a.id !== agent.id).map((a) => ({ id: a.id, name: `${a.name} (${RANK_LABEL[a.rank]})` }))}
+              candidates={active.filter((a) => a.id !== agent.id).map((a) => ({ id: a.id, name: `${a.name} (${t(RANK_LABEL[a.rank])})` }))}
             />
           </div>
         </details>
@@ -91,13 +93,13 @@ export default async function OrgPage() {
   const fired = all.filter((a) => !a.isActive);
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pb-12">
-      <h1 className="text-xl font-bold">조직도</h1>
-      <p className="text-sm opacity-70">카드를 누르면 지시하거나 상사·직급을 바꿀 수 있습니다.</p>
+      <h1 className="text-xl font-bold">{t("조직도")}</h1>
+      <p className="text-sm opacity-70">{t("카드를 누르면 지시하거나 상사·직급을 바꿀 수 있습니다.")}</p>
       {active.length === 0 && (
         <p className="text-sm">
-          아직 에이전트가 없습니다.{" "}
+          {t("아직 에이전트가 없습니다.")}{" "}
           <Link href="/agents" className="underline">
-            에이전트 채용
+            {t("에이전트 채용")}
           </Link>
         </p>
       )}
@@ -108,7 +110,7 @@ export default async function OrgPage() {
       </ul>
       {fired.length > 0 && (
         <p className="text-xs opacity-60">
-          해고된 에이전트: {fired.map((f) => f.name).join(", ")} (에이전트 화면에서 재고용)
+          {t("해고된 에이전트: {names} (에이전트 화면에서 재고용)", { names: fired.map((f) => f.name).join(", ") })}
         </p>
       )}
     </main>

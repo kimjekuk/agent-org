@@ -1,8 +1,10 @@
 "use client";
 
 // F204 미션 리플레이: 장면을 차례로 사무실 화면에 보여 준다. 재생·일시정지·속도(1·2·4배)·슬라이더·앞뒤 이동, 아래에 그 순간의 자막
+import { dateFormat } from "@agentorg/shared/i18n";
 import { type OfficeActivity, officeLayout } from "@agentorg/shared/office";
 import { useEffect, useMemo, useState } from "react";
+import { useLocale, useT } from "@/components/I18n";
 import { Office } from "@/components/Office";
 import type { OfficeAgent } from "@/lib/office";
 
@@ -20,13 +22,13 @@ export interface ReplayPlayerFrame {
   states: Record<string, { status: "IDLE" | "WORKING" | "BLOCKED"; activity: OfficeActivity | null }>;
 }
 
-const RANK = { LEADER: "리더", MANAGER: "팀장", MEMBER: "팀원" } as const;
+// 이름표는 화면에서 t(label)로 번역한다
+const RANK = { LEADER: "리더", MANAGER: "팀장", MEMBER: "팀원" } as const; // i18n-ignore
 const BADGE = {
-  WORKING: { label: "작업 중", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200" },
-  BLOCKED: { label: "막힘", className: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200" },
-  IDLE: { label: "대기", className: "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200" },
+  WORKING: { label: "작업 중", className: "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200" }, // i18n-ignore
+  BLOCKED: { label: "막힘", className: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200" }, // i18n-ignore
+  IDLE: { label: "대기", className: "bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200" }, // i18n-ignore
 };
-const timeFmt = new Intl.DateTimeFormat("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" });
 const STEP_MS = 1600;
 
 export function ReplayPlayer({ agents, frames, theme }: { agents: ReplayPlayerAgent[]; frames: ReplayPlayerFrame[]; theme?: string | null }) {
@@ -34,6 +36,9 @@ export function ReplayPlayer({ agents, frames, theme }: { agents: ReplayPlayerAg
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const last = frames.length - 1;
+  const t = useT();
+  const locale = useLocale();
+  const timeFmt = useMemo(() => dateFormat(locale, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }), [locale]);
 
   useEffect(() => {
     if (!playing) return;
@@ -41,8 +46,8 @@ export function ReplayPlayer({ agents, frames, theme }: { agents: ReplayPlayerAg
       setPlaying(false);
       return;
     }
-    const t = setTimeout(() => setI((n) => Math.min(last, n + 1)), STEP_MS / speed);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setI((n) => Math.min(last, n + 1)), STEP_MS / speed);
+    return () => clearTimeout(timer);
   }, [playing, i, last, speed]);
 
   const frame = frames[i];
@@ -57,20 +62,20 @@ export function ReplayPlayer({ agents, frames, theme }: { agents: ReplayPlayerAg
         id: a.id,
         name: a.name,
         avatar: a.avatar as OfficeAgent["avatar"],
-        rankLabel: RANK[a.rank],
+        rankLabel: t(RANK[a.rank]),
         level: a.level,
         status: s.status,
         resting: false,
-        badge: BADGE[s.status],
+        badge: { ...BADGE[s.status], label: t(BADGE[s.status].label) },
         activity: s.activity,
         doing: null,
         place: placements[k],
       };
     });
     return { list, deskCount };
-  }, [agents, frame]);
+  }, [agents, frame, t]);
 
-  if (frames.length === 0) return <p className="text-sm opacity-70">아직 다시 볼 기록이 없습니다.</p>;
+  if (frames.length === 0) return <p className="text-sm opacity-70">{t("아직 다시 볼 기록이 없습니다.")}</p>;
 
   const recent = frames.slice(Math.max(0, i - 3), i).reverse();
   return (
@@ -103,10 +108,10 @@ export function ReplayPlayer({ agents, frames, theme }: { agents: ReplayPlayerAg
           setI(Number(e.target.value));
         }}
         className="h-11 w-full"
-        aria-label="장면 이동"
+        aria-label={t("장면 이동")}
       />
       <div className="grid grid-cols-4 gap-2">
-        <button type="button" onClick={() => setI((n) => Math.max(0, n - 1))} disabled={i === 0} className="h-11 rounded-lg bg-black/5 font-semibold disabled:opacity-40 dark:bg-white/10" aria-label="이전 장면">
+        <button type="button" onClick={() => setI((n) => Math.max(0, n - 1))} disabled={i === 0} className="h-11 rounded-lg bg-black/5 font-semibold disabled:opacity-40 dark:bg-white/10" aria-label={t("이전 장면")}>
           ◀
         </button>
         <button
@@ -117,14 +122,14 @@ export function ReplayPlayer({ agents, frames, theme }: { agents: ReplayPlayerAg
           }}
           className="col-span-2 h-11 rounded-lg bg-foreground font-semibold text-background"
         >
-          {playing ? "⏸ 일시정지" : i >= last ? "↺ 처음부터" : "▶ 재생"}
+          {playing ? `⏸ ${t("일시정지")}` : i >= last ? `↺ ${t("처음부터")}` : `▶ ${t("재생")}`}
         </button>
-        <button type="button" onClick={() => setI((n) => Math.min(last, n + 1))} disabled={i >= last} className="h-11 rounded-lg bg-black/5 font-semibold disabled:opacity-40 dark:bg-white/10" aria-label="다음 장면">
+        <button type="button" onClick={() => setI((n) => Math.min(last, n + 1))} disabled={i >= last} className="h-11 rounded-lg bg-black/5 font-semibold disabled:opacity-40 dark:bg-white/10" aria-label={t("다음 장면")}>
           ▶
         </button>
       </div>
       <div className="flex items-center gap-2 text-sm">
-        <span className="opacity-70">속도</span>
+        <span className="opacity-70">{t("속도")}</span>
         {[1, 2, 4].map((s) => (
           <button key={s} type="button" onClick={() => setSpeed(s)} aria-pressed={speed === s} className={`h-11 min-w-11 rounded-lg px-3 font-semibold ${speed === s ? "bg-foreground text-background" : "bg-black/5 dark:bg-white/10"}`}>
             {s}×

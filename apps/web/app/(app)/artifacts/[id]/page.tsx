@@ -1,10 +1,12 @@
 import { getDb, schema } from "@agentorg/shared/db";
 import { isFinalResult, listExportChannels } from "@agentorg/shared/export";
+import { dateFormat } from "@agentorg/shared/i18n";
 import { artifactSourceKey } from "@agentorg/shared/knowledge";
 import { and, eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { artifactVersions } from "@/lib/artifacts";
+import { getLocale, getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonGhost, card } from "@/lib/ui";
@@ -14,14 +16,14 @@ import { ExportForm } from "./ExportForm";
 
 export const dynamic = "force-dynamic";
 
-const timeFmt = new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" });
-
 // F011 산출물 상세: 내용 · 평가(1~5) · 버전 목록 · 되돌리기
 export default async function ArtifactPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const user = await requireUser();
   const org = await getCurrentOrg(user.id);
   if (!org || !/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const t = await getT();
+  const timeFmt = dateFormat(await getLocale(), { dateStyle: "short", timeStyle: "short" });
   const db = getDb();
   const [art] = await db
     .select()
@@ -40,34 +42,35 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
   const latest = versions[0];
   // F205 미션 최종 결과만 바깥으로 보낼 수 있다
   const channels = isFinalResult(art) ? await listExportChannels(db, org.id) : null;
+  const exportHint = t("{link}에서 이메일이나 슬랙을 먼저 등록해 주세요.").split("{link}");
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pb-12">
       <Link href="/artifacts" className="text-sm opacity-70">
-        ← 산출물
+        ← {t("산출물")}
       </Link>
       <div>
         <h1 className="text-xl font-bold">{art.title}</h1>
         <p className="text-sm opacity-70">
-          {agent?.name ?? "에이전트"} · v{art.version}
-          {latest && latest.id !== art.id ? ` (최신 v${latest.version})` : ""} · {timeFmt.format(art.createdAt)}
+          {agent?.name ?? t("에이전트")} · v{art.version}
+          {latest && latest.id !== art.id ? ` (${t("최신 v{n}", { n: latest.version })})` : ""} · {timeFmt.format(art.createdAt)}
         </p>
         {mission && (
           <Link href={`/missions/${mission.id}`} className="text-sm underline">
-            미션: {mission.title}
+            {t("미션: {title}", { title: mission.title })}
           </Link>
         )}
       </div>
 
-      <form className="flex items-center gap-1" aria-label="평가">
+      <form className="flex items-center gap-1" aria-label={t("평가")}>
         <input type="hidden" name="id" value={art.id} />
-        <span className="mr-1 text-sm font-semibold">평가</span>
+        <span className="mr-1 text-sm font-semibold">{t("평가")}</span>
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="submit"
             formAction={rateArtifact.bind(null, n)}
-            aria-label={`${n}점`}
+            aria-label={t("{n}점", { n })}
             className={`size-11 text-2xl ${art.rating && n <= art.rating ? "text-amber-400" : "opacity-30"}`}
           >
             ★
@@ -77,30 +80,30 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
 
       {wiki?.artifactId === art.id ? (
         <Link href={`/knowledge/${wiki.id}`} className="text-sm underline">
-          📚 지식 베이스에 들어 있음
+          📚 {t("지식 베이스에 들어 있음")}
         </Link>
       ) : (
         <form action={addArtifact}>
           <input type="hidden" name="artifactId" value={art.id} />
           <button type="submit" className={`${buttonGhost} w-full`}>
-            📚 {wiki ? "이 버전으로 지식 베이스 고치기" : "지식 베이스에 넣기"}
+            📚 {wiki ? t("이 버전으로 지식 베이스 고치기") : t("지식 베이스에 넣기")}
           </button>
         </form>
       )}
 
       {channels && (
         <details className={card}>
-          <summary className="cursor-pointer font-semibold">📤 보내기 (이메일·슬랙)</summary>
+          <summary className="cursor-pointer font-semibold">📤 {t("보내기 (이메일·슬랙)")}</summary>
           <div className="mt-3">
             {channels.length > 0 ? (
               <ExportForm artifactId={art.id} channels={channels} />
             ) : (
               <p className="text-sm opacity-80">
-                아직 연결된 곳이 없습니다.{" "}
+                {t("아직 연결된 곳이 없습니다.")} {exportHint[0]}
                 <Link href="/settings#export" className="font-semibold underline">
-                  설정 → 내보내기 연결
+                  {t("설정 → 내보내기 연결")}
                 </Link>
-                에서 이메일이나 슬랙을 먼저 등록해 주세요.
+                {exportHint[1]}
               </p>
             )}
           </div>
@@ -110,19 +113,19 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
       <article className={`${card} whitespace-pre-wrap break-words text-sm leading-relaxed`}>{art.content}</article>
 
       {versions.length > 1 && (
-        <section className="flex flex-col gap-2" aria-label="버전">
-          <h2 className="font-semibold">버전 {versions.length}개</h2>
+        <section className="flex flex-col gap-2" aria-label={t("버전")}>
+          <h2 className="font-semibold">{t("버전 {n}개", { n: versions.length })}</h2>
           <ul className="flex flex-col gap-2">
             {versions.map((v) => (
               <li key={v.id} className={`${card} flex items-center gap-2 p-3`}>
                 <Link href={`/artifacts/${v.id}`} className="min-w-0 flex-1 text-sm">
-                  <b>v{v.version}</b> {v.id === art.id ? "(보는 중)" : ""} <span className="opacity-60">· {timeFmt.format(v.createdAt)}</span>
+                  <b>v{v.version}</b> {v.id === art.id ? t("(보는 중)") : ""} <span className="opacity-60">· {timeFmt.format(v.createdAt)}</span>
                 </Link>
                 {v.id === art.id && latest.id !== art.id && (
                   <form action={revertArtifact}>
                     <input type="hidden" name="id" value={art.id} />
                     <button type="submit" className={buttonGhost}>
-                      이 버전으로 되돌리기
+                      {t("이 버전으로 되돌리기")}
                     </button>
                   </form>
                 )}

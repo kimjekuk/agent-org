@@ -5,6 +5,7 @@ import { writeAudit } from "@agentorg/shared/audit";
 import { getDb, schema } from "@agentorg/shared/db";
 import { getVapidKeys, notifyUser } from "@agentorg/shared/push";
 import { and, eq } from "drizzle-orm";
+import { getT } from "@/lib/i18n";
 import { requireUser } from "@/lib/session";
 
 export async function getPushPublicKey(): Promise<string> {
@@ -19,13 +20,14 @@ export interface SubscriptionInput {
 
 export async function savePushSubscription(sub: SubscriptionInput): Promise<{ ok: boolean; error?: string }> {
   const user = await requireUser();
-  if (!/^https:\/\//.test(sub?.endpoint ?? "") || !sub.keys?.p256dh || !sub.keys?.auth) return { ok: false, error: "알림 구독 정보가 올바르지 않습니다" };
+  const t = await getT();
+  if (!/^https:\/\//.test(sub?.endpoint ?? "") || !sub.keys?.p256dh || !sub.keys?.auth) return { ok: false, error: t("알림 구독 정보가 올바르지 않습니다") };
   await getDb().transaction(async (tx) => {
     await tx
       .insert(schema.pushSubscriptions)
       .values({ userId: user.id, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth })
       .onConflictDoUpdate({ target: schema.pushSubscriptions.endpoint, set: { userId: user.id, p256dh: sub.keys.p256dh, auth: sub.keys.auth } });
-    await writeAudit(tx, { actorType: "USER", actorId: user.id, action: "push.subscribe", targetType: "user", targetId: user.id, reasoning: "이 기기에서 알림을 켰습니다" });
+    await writeAudit(tx, { actorType: "USER", actorId: user.id, action: "push.subscribe", targetType: "user", targetId: user.id, reasoning: "이 기기에서 알림을 켰습니다" }); // i18n-ignore
   });
   return { ok: true };
 }
@@ -34,12 +36,18 @@ export async function removePushSubscription(endpoint: string) {
   const user = await requireUser();
   await getDb().transaction(async (tx) => {
     await tx.delete(schema.pushSubscriptions).where(and(eq(schema.pushSubscriptions.endpoint, endpoint), eq(schema.pushSubscriptions.userId, user.id)));
-    await writeAudit(tx, { actorType: "USER", actorId: user.id, action: "push.unsubscribe", targetType: "user", targetId: user.id, reasoning: "이 기기에서 알림을 껐습니다" });
+    await writeAudit(tx, { actorType: "USER", actorId: user.id, action: "push.unsubscribe", targetType: "user", targetId: user.id, reasoning: "이 기기에서 알림을 껐습니다" }); // i18n-ignore
   });
 }
 
 export async function sendTestPush(): Promise<{ sent: number }> {
   const user = await requireUser();
-  const sent = await notifyUser(getDb(), user.id, user.email, { title: "🔔 AgentOrg 알림 시험", body: "알림이 잘 옵니다. 승인 요청·예산 경고·미션 완료를 이렇게 알려 드립니다.", url: "/dashboard", tag: "test" });
+  const t = await getT();
+  const sent = await notifyUser(getDb(), user.id, user.email, {
+    title: t("🔔 AgentOrg 알림 시험"),
+    body: t("알림이 잘 옵니다. 승인 요청·예산 경고·미션 완료를 이렇게 알려 드립니다."),
+    url: "/dashboard",
+    tag: "test",
+  });
   return { sent };
 }

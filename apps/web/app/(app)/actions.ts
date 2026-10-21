@@ -22,7 +22,7 @@ export async function emergencyStop(orgId: string) {
       action: "org.emergency_stop",
       targetType: "organization",
       targetId: orgId,
-      reasoning: "사용자가 긴급 정지 버튼을 눌렀습니다 — 모든 에이전트는 다음 턴 시작 전에 멈춥니다",
+      reasoning: "사용자가 긴급 정지 버튼을 눌렀습니다 — 모든 에이전트는 다음 턴 시작 전에 멈춥니다", // i18n-ignore
     });
   });
   await publishOrgEvent(orgId, { type: "org" });
@@ -42,7 +42,7 @@ export async function resumeOrg(orgId: string) {
       action: "org.resume",
       targetType: "organization",
       targetId: orgId,
-      reasoning: "사용자가 긴급 정지를 해제했습니다",
+      reasoning: "사용자가 긴급 정지를 해제했습니다", // i18n-ignore
     });
   });
 

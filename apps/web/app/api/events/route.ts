@@ -1,5 +1,6 @@
 // 실시간 이벤트 (SSE). worker·web이 Redis에 발행한 조직 이벤트를 브라우저로 전달한다 (PRD 5장 "실시간 전달")
 import { createSubscriber, orgChannel } from "@agentorg/shared/events";
+import { getT } from "@/lib/i18n";
 import { getOwnedOrg } from "@/lib/org";
 import { getSessionUser } from "@/lib/session";
 
@@ -7,10 +8,11 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  const t = await getT();
   const userId = (await getSessionUser())?.id;
-  if (!userId) return new Response("로그인이 필요합니다", { status: 401 });
+  if (!userId) return new Response(t("로그인이 필요합니다"), { status: 401 });
   const orgId = new URL(request.url).searchParams.get("org") ?? "";
-  if (!(await getOwnedOrg(userId, orgId))) return new Response("조직을 찾을 수 없습니다", { status: 404 });
+  if (!(await getOwnedOrg(userId, orgId))) return new Response(t("조직을 찾을 수 없습니다"), { status: 404 });
 
   const encoder = new TextEncoder();
   const sub = createSubscriber();

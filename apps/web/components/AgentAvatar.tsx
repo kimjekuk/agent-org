@@ -1,9 +1,13 @@
+"use client";
+
 // 캐릭터 아바타 — 파츠 조합 SVG (PRD 2장 + F202: 머리 6·머리색 6·피부 4·표정 4·옷 4·옷색 6·액세서리 5, 레벨별 테두리·배지)
 import { type Avatar, HAIR_COLORS, levelLook, normalizeAvatar, SKIN_TONES } from "@agentorg/shared/agents/templates";
+import { useT } from "@/components/I18n";
 
 const COLORS = ["#FCD34D", "#F9A8D4", "#7DD3FC", "#86EFAC", "#C4B5FD", "#FDBA74"];
 
 export function AgentAvatar({ avatar, size = 48, label, level }: { avatar?: Partial<Avatar> | null; size?: number; label?: string; level?: number }) {
+  const t = useT();
   const a = normalizeAvatar(avatar);
   const color = COLORS[a.color % COLORS.length];
   const hairFill = HAIR_COLORS[a.hairColor].hex;
@@ -11,7 +15,7 @@ export function AgentAvatar({ avatar, size = 48, label, level }: { avatar?: Part
   const look = levelLook(level ?? 0);
 
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={label ?? "에이전트 아바타"} className="shrink-0">
+    <svg width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={label ?? t("에이전트 아바타")} className="shrink-0">
       <circle cx="32" cy="32" r="31" fill={color} />
       {look.ring && <circle cx="32" cy="32" r="29.5" fill="none" stroke={look.ring} strokeWidth="3" />}
       {/* 옷 (어깨) */}

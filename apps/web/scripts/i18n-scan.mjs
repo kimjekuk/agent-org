@@ -19,11 +19,11 @@ for (const f of files) {
     .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")) // 블록 주석
     .split("\n");
   src.forEach((line, i) => {
+    if (line.includes("i18n-ignore")) return; // 화면에 안 나가는 한국어 (기록·프롬프트·사전 값으로 쓰는 이름표)
     const code = line
       .replace(/(^|[^:"'`])\/\/.*$/, "$1") // 줄 주석
       .replace(KEY, "")
-      .replace(/console\.\w+\(.*$/, "")
-      .replace(/i18n-ignore.*$/, "");
+      .replace(/console\.\w+\(.*$/, "");
     if (/[가-힣]/.test(code)) {
       left++;
       console.log(`${f.replace(root, "")}:${i + 1}: ${line.trim().slice(0, 140)}`);

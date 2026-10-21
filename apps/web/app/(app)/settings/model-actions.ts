@@ -8,6 +8,7 @@ import { listModelChoices, PROVIDERS, type ProviderName } from "@agentorg/shared
 import { isBuiltinModel } from "@agentorg/shared/llm/pricing";
 import { eq, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 
@@ -24,15 +25,16 @@ function price(form: FormData, name: string, required: boolean): number | null |
 export async function saveModel(_prev: ModelFormState, form: FormData): Promise<ModelFormState> {
   const user = await requireUser();
   const provider = String(form.get("provider")) as ProviderName;
-  if (provider === "anthropic" || !PROVIDERS.includes(provider)) return { error: "제공사를 골라 주세요 (Claude 모델은 기본으로 들어 있습니다)" };
+  const t = await getT();
+  if (provider === "anthropic" || !PROVIDERS.includes(provider)) return { error: t("제공사를 골라 주세요 (Claude 모델은 기본으로 들어 있습니다)") };
   const id = String(form.get("id") ?? "").trim();
-  if (!/^[A-Za-z0-9._:/-]{2,100}$/.test(id)) return { error: "모델 이름은 제공사 문서에 있는 그대로 입력해 주세요 (예: gpt-6.1-sol)" };
-  if (isBuiltinModel(id)) return { error: "이미 기본으로 들어 있는 Claude 모델입니다" };
+  if (!/^[A-Za-z0-9._:/-]{2,100}$/.test(id)) return { error: t("모델 이름은 제공사 문서에 있는 그대로 입력해 주세요 (예: gpt-6.1-sol)") };
+  if (isBuiltinModel(id)) return { error: t("이미 기본으로 들어 있는 Claude 모델입니다") };
   const label = String(form.get("label") ?? "").trim().slice(0, 60) || id;
   const input = price(form, "inputUsd", true);
   const output = price(form, "outputUsd", true);
   const cached = price(form, "cachedInputUsd", false);
-  if (input === "bad" || output === "bad" || cached === "bad") return { error: "요금은 100만 토큰당 달러로 0~1000 사이 숫자를 입력해 주세요" };
+  if (input === "bad" || output === "bad" || cached === "bad") return { error: t("요금은 100만 토큰당 달러로 0~1000 사이 숫자를 입력해 주세요") };
 
   const values = { provider, label, inputUsd: String(input), outputUsd: String(output), cachedInputUsd: cached === null ? null : String(cached), enabled: true, updatedAt: new Date() };
   await getDb().transaction(async (tx) => {
@@ -43,11 +45,11 @@ export async function saveModel(_prev: ModelFormState, form: FormData): Promise<
       action: "llm_model.save",
       targetType: "llm_model",
       targetId: id,
-      reasoning: `${label}: 입력 $${input} / 출력 $${output}${cached !== null ? ` / 캐시 $${cached}` : ""} (100만 토큰당), 사용 켬`,
+      reasoning: `${label}: 입력 $${input} / 출력 $${output}${cached !== null ? ` / 캐시 $${cached}` : ""} (100만 토큰당), 사용 켬`, // i18n-ignore
     });
   });
   revalidatePath("/settings");
-  return { ok: "저장하고 켰습니다. 에이전트 프로필에서 고를 수 있습니다." };
+  return { ok: t("저장하고 켰습니다. 에이전트 프로필에서 고를 수 있습니다.") };
 }
 
 export async function toggleModel(form: FormData) {
@@ -63,7 +65,7 @@ export async function toggleModel(form: FormData) {
       action: row.enabled ? "llm_model.disable" : "llm_model.enable",
       targetType: "llm_model",
       targetId: id,
-      reasoning: row.enabled ? `${row.label} 끔` : `${row.label} 요금 확인 후 켬 (입력 $${Number(row.inputUsd)} / 출력 $${Number(row.outputUsd)})`,
+      reasoning: row.enabled ? `${row.label} 끔` : `${row.label} 요금 확인 후 켬 (입력 $${Number(row.inputUsd)} / 출력 $${Number(row.outputUsd)})`, // i18n-ignore
     });
   });
   revalidatePath("/settings");
@@ -72,17 +74,18 @@ export async function toggleModel(form: FormData) {
 export async function deleteModel(_prev: ModelFormState, form: FormData): Promise<ModelFormState> {
   const user = await requireUser();
   const id = String(form.get("id"));
+  const t = await getT();
   const users = await getDb()
     .select({ name: schema.agents.name })
     .from(schema.agents)
     .where(or(eq(schema.agents.modelPrimary, id), eq(schema.agents.modelEconomy, id)));
-  if (users.length) return { error: `${users.map((u) => u.name).join(", ")}이(가) 쓰고 있어 지울 수 없습니다. 먼저 프로필에서 모델을 바꿔 주세요` };
+  if (users.length) return { error: t("{names}이(가) 쓰고 있어 지울 수 없습니다. 먼저 프로필에서 모델을 바꿔 주세요", { names: users.map((u) => u.name).join(", ") }) };
   await getDb().transaction(async (tx) => {
     const [row] = await tx.delete(schema.llmModels).where(eq(schema.llmModels.id, id)).returning();
-    if (row) await writeAudit(tx, { actorType: "USER", actorId: user.id, action: "llm_model.delete", targetType: "llm_model", targetId: id, reasoning: `${row.label} 삭제` });
+    if (row) await writeAudit(tx, { actorType: "USER", actorId: user.id, action: "llm_model.delete", targetType: "llm_model", targetId: id, reasoning: `${row.label} 삭제` }); // i18n-ignore
   });
   revalidatePath("/settings");
-  return { ok: "지웠습니다" };
+  return { ok: t("지웠습니다") };
 }
 
 /** F109 장애 시 대체 모델 (선택한 조직). 비우면 대체 없이 실패 처리 */
@@ -103,7 +106,7 @@ export async function saveFallbackModel(form: FormData) {
       action: "org.fallback_model",
       targetType: "organization",
       targetId: org.id,
-      reasoning: model ? `장애 시 대체 모델: ${model}` : "장애 시 대체 모델 쓰지 않음",
+      reasoning: model ? `장애 시 대체 모델: ${model}` : "장애 시 대체 모델 쓰지 않음", // i18n-ignore
     });
   });
   revalidatePath("/settings");
@@ -125,7 +128,7 @@ export async function saveBudgetDaily(form: FormData) {
       action: "org.budget_daily",
       targetType: "organization",
       targetId: org.id,
-      reasoning: `하루 예산 ${org.budgetDaily.toLocaleString("ko-KR")}원 → ${value.toLocaleString("ko-KR")}원`,
+      reasoning: `하루 예산 ${org.budgetDaily.toLocaleString("ko-KR")}원 → ${value.toLocaleString("ko-KR")}원`, // i18n-ignore
     });
   });
   revalidatePath("/settings");
@@ -147,7 +150,7 @@ export async function saveOfficeTheme(form: FormData) {
       action: "org.office_theme",
       targetType: "organization",
       targetId: org.id,
-      reasoning: `사무실 테마 ${OFFICE_THEMES[org.officeTheme as OfficeTheme]?.label ?? org.officeTheme} → ${OFFICE_THEMES[theme as OfficeTheme].label}`,
+      reasoning: `사무실 테마 ${OFFICE_THEMES[org.officeTheme as OfficeTheme]?.label ?? org.officeTheme} → ${OFFICE_THEMES[theme as OfficeTheme].label}`, // i18n-ignore
     });
   });
   revalidatePath("/settings");

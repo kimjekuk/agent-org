@@ -11,6 +11,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { artifactVersions } from "@/lib/artifacts";
+import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 
@@ -33,13 +34,13 @@ export async function rateArtifact(rating: number, form: FormData) {
   if (!art || !Number.isInteger(rating) || rating < 1 || rating > 5) return;
   await getDb().transaction(async (tx) => {
     await tx.update(schema.artifacts).set({ rating }).where(eq(schema.artifacts.id, art.id));
-    await writeAudit(tx, { orgId: org.id, actorType: "USER", actorId: user.id, action: "artifact.rate", targetType: "artifact", targetId: art.id, reasoning: `"${art.title}" v${art.version} 평가 ${rating}점` });
+    await writeAudit(tx, { orgId: org.id, actorType: "USER", actorId: user.id, action: "artifact.rate", targetType: "artifact", targetId: art.id, reasoning: `"${art.title}" v${art.version} 평가 ${rating}점` }); // i18n-ignore
   });
   // F102: 별점 보너스 경험치 (점수를 올린 만큼만)
   const bonus = ratingBonus(art.rating, rating);
-  if (bonus > 0 && art.agentId) await awardXp(getDb(), { agentId: art.agentId, amount: bonus, reason: `"${art.title}" 별점 ${rating}점` });
+  if (bonus > 0 && art.agentId) await awardXp(getDb(), { agentId: art.agentId, amount: bonus, reason: `"${art.title}" 별점 ${rating}점` }); // i18n-ignore
   // F105: 좋은 결과(4점 이상)는 지식 베이스에 넣는다
-  if (rating >= KNOWLEDGE_MIN_RATING) await addArtifactToKnowledge(getDb(), art, { type: "USER", id: user.id }, `평가 ${rating}점`);
+  if (rating >= KNOWLEDGE_MIN_RATING) await addArtifactToKnowledge(getDb(), art, { type: "USER", id: user.id }, `평가 ${rating}점`); // i18n-ignore
   revalidatePath(`/artifacts/${art.id}`);
   revalidatePath("/artifacts");
 }
@@ -73,7 +74,7 @@ export async function revertArtifact(form: FormData) {
       action: "artifact.revert",
       targetType: "artifact",
       targetId: c.id,
-      reasoning: `"${art.title}"을(를) v${art.version} 내용으로 되돌림 (새 버전 v${latest.version + 1})`,
+      reasoning: `"${art.title}"을(를) v${art.version} 내용으로 되돌림 (새 버전 v${latest.version + 1})`, // i18n-ignore
     });
     return c;
   });
@@ -86,11 +87,12 @@ export type ExportState = { error?: string; approvalId?: string; existing?: bool
 
 export async function requestExportAction(_prev: ExportState, form: FormData): Promise<ExportState> {
   const { user, org, art } = await context(form);
-  if (!art) return { error: "산출물을 찾을 수 없습니다" };
+  const t = await getT();
+  if (!art) return { error: t("산출물을 찾을 수 없습니다") };
   const channel = String(form.get("channel"));
-  if (!(EXPORT_CHANNELS as readonly string[]).includes(channel)) return { error: "보낼 곳을 골라 주세요" };
+  if (!(EXPORT_CHANNELS as readonly string[]).includes(channel)) return { error: t("보낼 곳을 골라 주세요") };
   const r = await requestExport(getDb(), { orgId: org.id, userId: user.id, artifactId: art.id, channel: channel as ExportChannel, to: String(form.get("to") ?? "") });
-  if ("error" in r) return { error: r.error };
+  if ("error" in r) return { error: t(r.error) };
   if (!r.existing) await publishOrgEvent(org.id, { type: "approval" });
   revalidatePath("/approvals");
   return { approvalId: r.approvalId, existing: r.existing };
