@@ -6,12 +6,13 @@ import { redirect } from "next/navigation";
 import { getT } from "@/lib/i18n";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
+import { loadTemplates } from "@/lib/templates";
 import { MissionForm } from "../forms";
 
 export const dynamic = "force-dynamic";
 
 // F006 미션 생성
-export default async function NewMissionPage() {
+export default async function NewMissionPage({ searchParams }: { searchParams: Promise<{ template?: string }> }) {
   const user = await requireUser();
   const org = await getCurrentOrg(user.id);
   if (!org) redirect("/settings");
@@ -22,6 +23,10 @@ export default async function NewMissionPage() {
     .where(and(eq(schema.agents.orgId, org.id), eq(schema.agents.isActive, true)))
     .orderBy(asc(schema.agents.createdAt));
   const hasLeader = agents.some((a) => a.rank === "LEADER");
+  // F208 대시보드에서 템플릿을 고르고 왔으면 칸을 채워 둔다 (보내기는 사용자가)
+  const templates = await loadTemplates(org.id);
+  const { template } = await searchParams;
+  const picked = templates.find((x) => x.id === template);
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-4 pb-12">
@@ -38,7 +43,7 @@ export default async function NewMissionPage() {
           {t("에서 리더를 채용하거나, 아래에서 담당을 직접 골라 주세요.")}
         </p>
       )}
-      <MissionForm leaders={agents.map((a) => ({ id: a.id, name: a.name }))} defaultAutonomy={org.autonomyDefault as Autonomy} />
+      <MissionForm leaders={agents.map((a) => ({ id: a.id, name: a.name }))} defaultAutonomy={org.autonomyDefault as Autonomy} templates={templates} initial={picked?.content} />
     </main>
   );
 }

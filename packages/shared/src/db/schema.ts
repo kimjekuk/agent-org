@@ -283,6 +283,15 @@ export const exportChannels = pgTable(
   (t) => [unique().on(t.orgId, t.kind)],
 );
 
+// F208 지시 템플릿 (조직별, 사용자가 저장한 것. 기본 템플릿은 directiveTemplates.ts 상수)
+export const directiveTemplates = pgTable("directive_templates", {
+  id: id(),
+  orgId: uuid("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  createdAt: createdAt(),
+});
+
 // 앱이 스스로 만들어 쓰는 비밀값 (예: 웹 푸시 VAPID 키). 값은 ENCRYPTION_KEY로 암호화해 저장한다
 export const appSecrets = pgTable("app_secrets", {
   name: text("name").primaryKey(),

@@ -5,6 +5,7 @@ import { dateFormat, INTL_LOCALE, type Locale, numberFormat } from "@agentorg/sh
 import { AUTONOMY_LABEL, type Autonomy, OUTPUT_FORMATS } from "@agentorg/shared/missions";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import Link from "next/link";
+import { SaveTemplateButton } from "@/components/Templates";
 import { notFound } from "next/navigation";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { getLocale, getT } from "@/lib/i18n";
@@ -106,6 +107,8 @@ export default async function MissionPage({ params, searchParams }: { params: Pr
           <h1 className="min-w-0 flex-1 text-xl font-bold">{mission.title}</h1>
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${st.className}`}>{tr(st.label)}</span>
         </div>
+        {/* F208 이 미션의 주제·목표를 템플릿으로 (새 미션에서 첫 줄 = 주제, 나머지 = 목표) */}
+        <SaveTemplateButton content={mission.goal ? `${mission.topic}\n${mission.goal}` : mission.topic} className="-mt-1" />
         <div className="h-2 overflow-hidden rounded-full bg-black/10 dark:bg-white/15" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
           <div className="h-full bg-blue-600" style={{ width: `${pct}%` }} />
         </div>

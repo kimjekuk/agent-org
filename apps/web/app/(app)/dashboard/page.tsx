@@ -12,6 +12,7 @@ import { getLocale, getT } from "@/lib/i18n";
 import { RANK_LABEL, isRestTime, statusBadge } from "@/lib/agents";
 import { MISSION_STATUS, progress } from "@/lib/missions";
 import { loadOffice } from "@/lib/office";
+import { loadTemplates } from "@/lib/templates";
 import { getCurrentOrg } from "@/lib/org";
 import { requireUser } from "@/lib/session";
 import { buttonGhost, card } from "@/lib/ui";
@@ -153,6 +154,22 @@ export default async function DashboardPage() {
           </form>
         </section>
       )}
+
+      {/* F208 자주 쓰는 지시: 누르면 새 미션 칸이 채워진다 (확인 후 시작) */}
+      <section className="flex flex-col gap-2" aria-label={t("자주 쓰는 지시")}>
+        <h2 className="font-semibold">⚡ {t("자주 쓰는 지시")}</h2>
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {(await loadTemplates(org.id)).map((x) => (
+            <Link
+              key={x.id}
+              href={`/missions/new?template=${encodeURIComponent(x.id)}`}
+              className="flex h-11 shrink-0 items-center rounded-full border border-black/15 px-4 text-sm font-semibold dark:border-white/20"
+            >
+              {x.builtin ? "📋" : "⭐"} {x.title}
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <section className="flex flex-col gap-2" aria-label={t("진행 중 미션")}>
         <div className="flex items-center justify-between">
