@@ -38,7 +38,9 @@
     "./history": "./src/history.ts",
     "./export": "./src/export.ts",
     "./agents/language": "./src/agents/language.ts",
-    "./i18n": "./src/i18n/index.ts"
+    "./i18n": "./src/i18n/index.ts",
+    "./notify": "./src/notify.ts",
+    "./channels": "./src/channels.ts"
   },
   "scripts": {
     "typecheck": "tsc",

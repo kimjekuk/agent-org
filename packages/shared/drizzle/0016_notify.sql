@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "notify" jsonb DEFAULT '{}'::jsonb NOT NULL;

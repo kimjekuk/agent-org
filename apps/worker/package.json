@@ -16,6 +16,7 @@
     "bullmq": "^5.56.0",
     "drizzle-orm": "0.45.4",
     "ioredis": "^5.11.1",
+    "nodemailer": "^7.0.13",
     "postgres": "3.4.9",
     "web-push": "3.6.7"
   },

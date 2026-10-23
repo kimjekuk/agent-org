@@ -2,9 +2,9 @@
 // 결과 화면의 '보내기' → 승인함에 EXTERNAL 요청 → 사용자가 승인하면 그때 발송 (CLAUDE.md 절대 규칙 3).
 // 연결 정보(SMTP 비밀번호·웹훅 주소)는 ENCRYPTION_KEY로 암호화해 저장하고 화면에는 가린 요약만 보여 준다.
 import { and, eq, inArray } from "drizzle-orm";
-import nodemailer from "nodemailer";
 import { requireExternalApproval } from "./approval";
 import { writeAudit } from "./audit";
+import { type EmailConfig, postSlack, type SlackConfig, sendEmail } from "./channels";
 import { decryptSecret, encryptSecret } from "./crypto";
 import type { AnyDb } from "./db/client";
 import { approvalRequests, artifacts, exportChannels, missions } from "./db/schema";
@@ -14,18 +14,7 @@ export const EXPORT_CHANNELS = ["EMAIL", "SLACK"] as const;
 export type ExportChannel = (typeof EXPORT_CHANNELS)[number];
 export const CHANNEL_LABEL: Record<ExportChannel, string> = { EMAIL: "이메일", SLACK: "슬랙" };
 
-export interface EmailConfig {
-  host: string;
-  port: number;
-  user: string;
-  pass: string;
-  from: string;
-  /** 기본 받는 사람 (보낼 때 바꿀 수 있다) */
-  to: string[];
-}
-export interface SlackConfig {
-  webhookUrl: string;
-}
+export type { EmailConfig, SlackConfig };
 
 /** 승인 요청 payload: 무엇을 어디로 보낼지 + 발송 결과 */
 export interface ExportPayload {
@@ -233,33 +222,13 @@ export function toEmailHtml(msg: ExportMessage): string {
 }
 
 export const defaultSenders: ExportSenders = {
-  async slack(config, msg) {
-    const res = await fetch(config.webhookUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: toSlackText(msg) }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) throw new Error(`슬랙 응답 ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  },
-  async email(config, to, msg) {
-    const transport = nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
-      secure: config.port === 465,
-      auth: { user: config.user, pass: config.pass },
-      connectionTimeout: 15_000,
-      greetingTimeout: 15_000,
-      socketTimeout: 30_000,
-    });
-    await transport.sendMail({
-      from: config.from,
-      to,
+  slack: (config, msg) => postSlack(config, toSlackText(msg)),
+  email: (config, to, msg) =>
+    sendEmail(config, to, {
       subject: `[AgentOrg] ${msg.title}`,
       text: `${msg.title}\n${msg.missionTitle ? `미션: ${msg.missionTitle}\n` : ""}\n${msg.body}\n\n— AgentOrg에서 보냄`,
       html: toEmailHtml(msg),
-    });
-  },
+    }),
 };
 
 /**

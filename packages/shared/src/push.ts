@@ -6,6 +6,7 @@ import webpush from "web-push";
 import { decryptSecret, encryptSecret } from "./crypto";
 import type { AnyDb } from "./db/client";
 import { appSecrets, organizations, pushSubscriptions, users } from "./db/schema";
+import { notifyChannels } from "./notify";
 
 const VAPID = "vapid";
 
@@ -33,8 +34,9 @@ export async function getVapidKeys(db: AnyDb): Promise<VapidKeys> {
   return JSON.parse(decryptSecret(saved.encryptedValue)) as VapidKeys;
 }
 
-/** 조직 소유자의 모든 기기로 보낸다. 보낸 기기 수를 돌려준다 */
+/** 조직 소유자의 모든 기기로 보낸다. 보낸 기기 수를 돌려준다. F207: 설정에서 켠 슬랙·이메일로도 보낸다 */
 export async function notifyOrgOwner(db: AnyDb, orgId: string, msg: PushMessage): Promise<number> {
+  await notifyChannels(db, orgId, msg);
   try {
     const [org] = await db
       .select({ ownerId: organizations.ownerId, email: users.email })

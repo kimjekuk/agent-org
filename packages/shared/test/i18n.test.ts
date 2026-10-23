@@ -7,6 +7,7 @@ import { PERSONALITY_TYPES, SPEECH_TONES } from "../src/agents/personality";
 import { ACCESSORY_NAMES, COLOR_NAMES, FACE_NAMES, HAIR_COLORS, HAIR_NAMES, levelLook, OFFICE_THEMES, OUTFIT_NAMES, SKIN_TONES, TOOL_NAMES } from "../src/agents/templates";
 import { CHANNEL_LABEL } from "../src/export";
 import { levelTitle } from "../src/growth";
+import { NOTIFY_KINDS } from "../src/notify";
 import { en, makeT, translate } from "../src/i18n";
 
 const WEB = join(__dirname, "../../../apps/web");
@@ -52,6 +53,7 @@ async function dynamicKeys(): Promise<string[]> {
     ...SKIN_TONES.map((c) => c.name),
     ...Object.values(TOOL_NAMES),
     ...Object.values(CHANNEL_LABEL),
+    ...Object.values(NOTIFY_KINDS),
     ...levels.map(levelTitle),
     ...levels.map((l) => levelLook(l).label).filter((l): l is string => Boolean(l)),
     ...nav.SIDEBAR.map((s) => s.label),

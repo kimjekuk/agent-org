@@ -63,6 +63,7 @@ export const organizations = pgTable("organizations", {
   fallbackModel: text("fallback_model"), // F109 API 장애 시 대체 모델 (없으면 대체 없이 실패 처리)
   officeTheme: text("office_theme").notNull().default("DEFAULT"), // F202 사무실 테마 (DEFAULT·MODERN·FOREST·NIGHT)
   language: text("language").notNull().default("ko"), // F209 에이전트 기본 사용 언어 (agents/language.ts)
+  notify: jsonb("notify").notNull().default({}), // F207 알림 종류별 채널 (notify.ts NotifySettings)
   createdAt: createdAt(),
 });
 

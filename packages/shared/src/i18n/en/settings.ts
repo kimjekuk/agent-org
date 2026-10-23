@@ -185,4 +185,9 @@ export const settings: Record<string, string> = {
   "긴급 정지 중 — 모든 에이전트가 멈춰 있습니다": "Emergency stop — all agents are halted",
   "재개 중…": "Resuming…",
   재개: "Resume",
+  // F207 알림
+  알림: "Notifications",
+  "승인 대기": "Pending approvals",
+  "휴대폰 푸시는 기기마다 '더보기'에서 켭니다. 슬랙·이메일을 켜면 제목 한 줄과 앱 링크만 보내고, 결과물 내용은 보내지 않습니다.": "Turn on phone push per device under 'More'. Slack and email only get a one-line title and an app link — never artifact contents.",
+  "연결되지 않은 채널은 위 '내보내기 연결'에서 먼저 등록해 주세요.": "Connect a channel under 'Export connections' above first.",
 };

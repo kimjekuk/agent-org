@@ -13,6 +13,8 @@ import { DeleteModelForm, ModelForm } from "./model-forms";
 import { listExportChannels } from "@agentorg/shared/export";
 import { deleteChannel } from "./export-actions";
 import { saveLocale, saveOrgLanguage } from "./language-actions";
+import { toggleNotifyAction } from "./notify-actions";
+import { NOTIFY_CHANNELS, NOTIFY_KINDS, type NotifyKind, parseNotify } from "@agentorg/shared/notify";
 import { type AgentLanguage, LANGUAGES } from "@agentorg/shared/agents/language";
 import { dateFormat, type Locale, LOCALES } from "@agentorg/shared/i18n";
 import { getLocale, getT } from "@/lib/i18n";
@@ -271,6 +273,43 @@ export default async function SettingsPage() {
               </details>
             );
           })}
+        </section>
+      )}
+
+      {currentOrg && (
+        <section className={`${card} flex flex-col gap-3`} aria-label={t("알림")}>
+          <h2 className="font-semibold">{t("알림")}</h2>
+          <p className="text-sm opacity-70">{t("휴대폰 푸시는 기기마다 '더보기'에서 켭니다. 슬랙·이메일을 켜면 제목 한 줄과 앱 링크만 보내고, 결과물 내용은 보내지 않습니다.")}</p>
+          {(Object.keys(NOTIFY_KINDS) as NotifyKind[]).map((kind) => {
+            const on = parseNotify(currentOrg.notify).kinds?.[kind] ?? [];
+            return (
+              <div key={kind} className="flex flex-col gap-2">
+                <p className="text-sm font-semibold">{t(NOTIFY_KINDS[kind])}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {NOTIFY_CHANNELS.map((channel) => {
+                    const connected = exportChannels.some((c) => c.kind === channel);
+                    const active = connected && on.includes(channel);
+                    return (
+                      <form key={channel} action={toggleNotifyAction}>
+                        <input type="hidden" name="kind" value={kind} />
+                        <input type="hidden" name="channel" value={channel} />
+                        <input type="hidden" name="on" value={active ? "0" : "1"} />
+                        <button
+                          type="submit"
+                          disabled={!connected}
+                          aria-pressed={active}
+                          className={`h-11 w-full rounded-lg border text-sm font-semibold disabled:opacity-40 ${active ? "border-foreground ring-2 ring-foreground" : "border-black/15 dark:border-white/15"}`}
+                        >
+                          {channel === "SLACK" ? `💬 ${t("슬랙")}` : `✉️ ${t("이메일")}`} {active ? t("켜짐") : t("꺼짐")}
+                        </button>
+                      </form>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {exportChannels.length < NOTIFY_CHANNELS.length && <p className="text-xs opacity-70">{t("연결되지 않은 채널은 위 '내보내기 연결'에서 먼저 등록해 주세요.")}</p>}
         </section>
       )}
 
