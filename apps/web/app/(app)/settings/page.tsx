@@ -14,6 +14,9 @@ import { listExportChannels } from "@agentorg/shared/export";
 import { deleteChannel } from "./export-actions";
 import { saveLocale, saveOrgLanguage } from "./language-actions";
 import { toggleNotifyAction } from "./notify-actions";
+import { deleteTemplate } from "../templates/actions";
+import { AddTemplateForm } from "@/components/Templates";
+import { loadTemplates } from "@/lib/templates";
 import { NOTIFY_CHANNELS, NOTIFY_KINDS, type NotifyKind, parseNotify } from "@agentorg/shared/notify";
 import { type AgentLanguage, LANGUAGES } from "@agentorg/shared/agents/language";
 import { dateFormat, type Locale, LOCALES } from "@agentorg/shared/i18n";
@@ -43,6 +46,7 @@ export default async function SettingsPage() {
   const t = await getT();
   const dateFmt = dateFormat(locale, { dateStyle: "medium" });
   const [modelNotePre, modelNoteBold, modelNotePost] = t("다른 회사 모델은 공식 요금 페이지에서 <b>모델 이름과 요금을 확인한 뒤</b> 켜야 씁니다.").split(/<\/?b>/);
+  const savedTemplates = currentOrg ? (await loadTemplates(currentOrg.id)).filter((x) => !x.builtin) : [];
   const exportChannels = currentOrg ? await listExportChannels(db, currentOrg.id) : [];
   const providerOptions = PROVIDERS.filter((p) => p !== "anthropic").map((p) => ({ value: p, label: PROVIDER_LABEL[p] }));
 
@@ -273,6 +277,35 @@ export default async function SettingsPage() {
               </details>
             );
           })}
+        </section>
+      )}
+
+      {currentOrg && (
+        <section className={`${card} flex flex-col gap-3`} aria-label={t("지시 템플릿")}>
+          <h2 className="font-semibold">{t("지시 템플릿")}</h2>
+          <p className="text-sm opacity-70">{t("대시보드·지시칸·새 미션 화면의 버튼입니다. 누르면 칸만 채우고, 보내기는 직접 누릅니다. 보낸 지시 옆 ⭐로도 저장할 수 있습니다.")}</p>
+          {savedTemplates.length > 0 && (
+            <ul className="flex flex-col gap-2">
+              {savedTemplates.map((x) => (
+                <li key={x.id} className="flex items-center gap-2 rounded-lg border border-black/10 p-3 dark:border-white/15">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">⭐ {x.title}</p>
+                    <p className="truncate text-xs opacity-70">{x.content}</p>
+                  </div>
+                  <form action={deleteTemplate}>
+                    <input type="hidden" name="id" value={x.id} />
+                    <button type="submit" className={`${buttonGhost} text-red-600 dark:text-red-400`}>
+                      {t("삭제")}
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+          <details>
+            <summary className="cursor-pointer py-2 text-sm font-semibold">+ {t("템플릿 추가")}</summary>
+            <AddTemplateForm />
+          </details>
         </section>
       )}
 

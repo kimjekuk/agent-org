@@ -17,6 +17,8 @@ import { requireUser } from "@/lib/session";
 import { buttonDanger, buttonGhost, card } from "@/lib/ui";
 import { cloneAgent, deleteAgent, toggleActive, togglePause } from "../actions";
 import { CharacterEditor, DirectiveForm, ProfileForm } from "../forms";
+import { SaveTemplateButton } from "@/components/Templates";
+import { loadTemplates } from "@/lib/templates";
 import { deleteMemory, resetMemories } from "../memory-actions";
 import { AddMemoryForm, EditMemoryForm } from "../memory-forms";
 
@@ -51,6 +53,7 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
   const agent = await getOrgAgent(org.id, id);
   if (!agent) notFound();
   const db = getDb();
+  const templates = await loadTemplates(org.id); // F208
 
   const others = await db
     .select({ id: schema.agents.id, name: schema.agents.name })
@@ -146,6 +149,7 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
                 {m.type === "DIRECTIVE" && !m.readAt ? ` · ${t("대기 중")}` : ""}
               </p>
               <p className="whitespace-pre-wrap break-words">{m.content}</p>
+              {fromUser && m.type === "DIRECTIVE" && !m.missionId && <SaveTemplateButton content={m.content} className="mt-1 text-right" />}
               {art && (
                 <details className="mt-2 rounded-lg bg-background p-3 text-foreground">
                   <summary className="cursor-pointer font-semibold">📄 {art.title}</summary>
@@ -164,7 +168,7 @@ export default async function AgentPage({ params, searchParams }: { params: Prom
         {working && <p className="self-start text-sm opacity-70">✍️ {t("{name}이(가) 작업 중입니다…", { name: agent.name })}</p>}
       </section>
 
-      <DirectiveForm agentId={agent.id} />
+      <DirectiveForm agentId={agent.id} templates={templates} />
 
       <section className="flex flex-col gap-4 px-4 pb-12">
         <details id="profile" className={`${card} scroll-mt-20`}>

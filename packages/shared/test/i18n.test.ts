@@ -8,6 +8,7 @@ import { ACCESSORY_NAMES, COLOR_NAMES, FACE_NAMES, HAIR_COLORS, HAIR_NAMES, leve
 import { CHANNEL_LABEL } from "../src/export";
 import { levelTitle } from "../src/growth";
 import { NOTIFY_KINDS } from "../src/notify";
+import { DEFAULT_DIRECTIVE_TEMPLATES } from "../src/directiveTemplates";
 import { en, makeT, translate } from "../src/i18n";
 
 const WEB = join(__dirname, "../../../apps/web");
@@ -54,6 +55,9 @@ async function dynamicKeys(): Promise<string[]> {
     ...Object.values(TOOL_NAMES),
     ...Object.values(CHANNEL_LABEL),
     ...Object.values(NOTIFY_KINDS),
+    ...DEFAULT_DIRECTIVE_TEMPLATES.flatMap((x) => [x.title, x.content]),
+    "내용을 입력해 주세요",
+    "템플릿은 30개까지 저장할 수 있습니다. 안 쓰는 것을 지워 주세요",
     ...levels.map(levelTitle),
     ...levels.map((l) => levelLook(l).label).filter((l): l is string => Boolean(l)),
     ...nav.SIDEBAR.map((s) => s.label),

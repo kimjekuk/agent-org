@@ -2,7 +2,9 @@
 
 import { AUTONOMY_HELP, AUTONOMY_LABEL, type Autonomy, OUTPUT_FORMATS } from "@agentorg/shared/missions";
 import { useActionState, useRef } from "react";
+import type { DirectiveTemplate } from "@agentorg/shared/directiveTemplates";
 import { useT } from "@/components/I18n";
+import { TemplateChips } from "@/components/Templates";
 import { button, errorText, input } from "@/lib/ui";
 import { createMission, type FormState, replyMeeting, sendMissionNote, updateMissionSettings } from "./actions";
 
@@ -18,18 +20,47 @@ const label = "flex flex-col gap-1 text-sm font-semibold";
 const AUTONOMIES = Object.keys(AUTONOMY_LABEL) as Autonomy[];
 
 /** F006 미션 생성 폼 — 필수는 주제 하나. 나머지는 기본값으로 바로 시작할 수 있다 */
-export function MissionForm({ leaders, defaultAutonomy }: { leaders: { id: string; name: string }[]; defaultAutonomy: Autonomy }) {
+/** F208 템플릿 내용을 새 미션 칸에: 첫 줄 = 주제, 나머지 = 목표 (shared splitForMission과 같은 규칙) */
+function splitForMission(content: string): { topic: string; goal: string } {
+  const [first, ...rest] = content.trim().split("\n");
+  return { topic: first.trim().slice(0, 200), goal: rest.join("\n").trim().slice(0, 1000) };
+}
+
+export function MissionForm({
+  leaders,
+  defaultAutonomy,
+  templates = [],
+  initial,
+}: {
+  leaders: { id: string; name: string }[];
+  defaultAutonomy: Autonomy;
+  templates?: DirectiveTemplate[];
+  /** 대시보드에서 고른 템플릿 내용 */
+  initial?: string;
+}) {
   const [state, action, pending] = useActionState(createMission, undefined);
   const t = useT();
+  const topicRef = useRef<HTMLInputElement>(null);
+  const goalRef = useRef<HTMLTextAreaElement>(null);
+  const start = initial ? splitForMission(initial) : null;
   return (
     <form action={action} className="flex flex-col gap-4">
+      <TemplateChips
+        templates={templates}
+        onPick={(content) => {
+          const v = splitForMission(content);
+          if (topicRef.current) topicRef.current.value = v.topic;
+          if (goalRef.current) goalRef.current.value = v.goal;
+          topicRef.current?.focus();
+        }}
+      />
       <label className={label}>
         {t("주제 (필수)")}
-        <input name="topic" required minLength={2} maxLength={200} placeholder={t("예: 2026년 숏폼 콘텐츠 트렌드")} className={input} />
+        <input ref={topicRef} name="topic" required minLength={2} maxLength={200} defaultValue={start?.topic} placeholder={t("예: 2026년 숏폼 콘텐츠 트렌드")} className={input} />
       </label>
       <label className={label}>
         {t("목표")}
-        <textarea name="goal" rows={2} maxLength={1000} placeholder={t("예: 다음 달 채널 기획에 쓸 근거 정리")} className={textarea} />
+        <textarea ref={goalRef} name="goal" rows={2} maxLength={1000} defaultValue={start?.goal} placeholder={t("예: 다음 달 채널 기획에 쓸 근거 정리")} className={textarea} />
       </label>
       <label className={label}>
         {t("성공 기준 (한 줄에 하나)")}

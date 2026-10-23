@@ -1,6 +1,7 @@
 "use client";
 
 import { type AgentLanguage, LANGUAGES } from "@agentorg/shared/agents/language";
+import type { DirectiveTemplate } from "@agentorg/shared/directiveTemplates";
 import { PERSONALITY_TYPES, type PersonalityType, SPEECH_TONES, type SpeechTone } from "@agentorg/shared/agents/personality";
 import {
   ACCESSORY_NAMES,
@@ -20,6 +21,7 @@ import { useActionState, useRef, useState } from "react";
 import type { T } from "@agentorg/shared/i18n";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { useT } from "@/components/I18n";
+import { TemplateChips } from "@/components/Templates";
 import { PixelSprite } from "@/components/PixelSprite";
 import { button, errorText, input } from "@/lib/ui";
 import { type FormState, hireAgent, saveAvatar, sendDirective, updateAgent } from "./actions";
@@ -56,7 +58,7 @@ export function HireForm({ templates }: { templates: { key: string; title: strin
 }
 
 /** 직접 지시 입력 — 모바일에서 화면 아래에 붙는다 (PRD F017: 지시 입력창 하단 고정) */
-export function DirectiveForm({ agentId, disabled }: { agentId: string; disabled?: boolean }) {
+export function DirectiveForm({ agentId, disabled, templates = [] }: { agentId: string; disabled?: boolean; templates?: DirectiveTemplate[] }) {
   const t = useT();
   const [state, action, pending] = useActionState(sendDirective, undefined);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -70,6 +72,14 @@ export function DirectiveForm({ agentId, disabled }: { agentId: string; disabled
       className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] md:bottom-0 flex flex-col gap-1 border-t border-black/10 bg-background/95 p-3 backdrop-blur dark:border-white/15"
     >
       <input type="hidden" name="id" value={agentId} />
+      <TemplateChips
+        templates={templates}
+        onPick={(content) => {
+          if (!ref.current) return;
+          ref.current.value = content;
+          ref.current.focus();
+        }}
+      />
       <div className="flex items-end gap-2">
         <textarea
           ref={ref}

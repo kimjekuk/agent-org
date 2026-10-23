@@ -40,7 +40,8 @@
     "./agents/language": "./src/agents/language.ts",
     "./i18n": "./src/i18n/index.ts",
     "./notify": "./src/notify.ts",
-    "./channels": "./src/channels.ts"
+    "./channels": "./src/channels.ts",
+    "./directiveTemplates": "./src/directiveTemplates.ts"
   },
   "scripts": {
     "typecheck": "tsc",
