@@ -10,11 +10,11 @@
   "license": "UNLICENSED",
   "dependencies": {
     "@anthropic-ai/sdk": "^1.2.0",
-    "marked": "^18.1.1"
+    "marked": "^18.1.1",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
   "private": true,

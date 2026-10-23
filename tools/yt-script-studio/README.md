@@ -103,7 +103,58 @@ npm start
 - 경쟁 영상의 **자막(대본 원문)은 가져오지 않습니다.** YouTube 공식 API는 남의 영상 자막을 제공하지 않습니다. 대신 제목, 설명, 태그, 썸네일 이미지, 인기 댓글로 분석합니다.
 - 결과는 초안입니다. 사실·수치에 `[확인 필요]`가 붙은 부분은 직접 확인하세요. 업로드 전에 대본을 한 번 읽어 보면 품질이 크게 올라갑니다.
 - YouTube는 대량 생산·반복형 콘텐츠의 수익화를 제한합니다. 사람이 기획하고 다듬는 과정을 거치세요.
-- 서버는 이 컴퓨터(127.0.0.1)에서만 열립니다. 휴대폰에서 쓰려면 VM에 올리고 Tailscale serve로 연결하는 작업이 따로 필요합니다(요청 시 추가).
+- 서버는 그 컴퓨터(127.0.0.1)에서만 열립니다. 휴대폰에서 쓰려면 아래 7번처럼 VM에 올립니다.
+
+---
+
+## 7. 휴대폰에서 쓰기 (오라클 VM + Tailscale)
+
+AgentOrg를 올린 그 VM에 함께 올립니다. Docker와 저장소 읽기 키는 `docs/DEPLOY.md` A·B에서 이미 설정했으므로 그대로 씁니다.
+JStudio(8000·5432·443)와 AgentOrg(3100·3200·8443·10000)는 건드리지 않습니다. 이 도구는 **7788**(내부)과 **7443**(Tailscale HTTPS) 포트를 씁니다.
+
+VM에 SSH로 접속한 뒤, 아래 명령을 **위에서부터 한 줄씩** 붙여 넣습니다.
+
+**① 코드 받기**
+```bash
+git clone -b ccr-9f8a8ba1-ba5tvb git@github-agentorg:kimjekuk/agent-org.git /opt/agentorg/yt-studio
+```
+
+**② 키 넣기.** YouTube 키와 Claude 키를 차례로 붙여 넣으면, 접속 비밀번호가 자동으로 만들어져 화면에 한 번 나옵니다. 메모해 두세요.
+```bash
+/opt/agentorg/yt-studio/tools/yt-script-studio/setup-env.sh
+```
+
+**③ 실행.** 처음에는 이미지 빌드로 2~5분 걸립니다.
+```bash
+/opt/agentorg/yt-studio/tools/yt-script-studio/update.sh
+```
+확인:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:7788/
+```
+→ `401`이 나오면 정상입니다(비밀번호를 요구한다는 뜻).
+
+**④ 휴대폰으로 내보내기**
+```bash
+sudo tailscale serve --bg --https=7443 http://127.0.0.1:7788
+```
+```bash
+sudo tailscale serve status; systemctl is-active jstudio
+```
+→ JStudio 줄, AgentOrg 줄, `:7443` 줄이 모두 보이고 마지막 줄이 `active`이면 성공입니다.
+
+**⑤ 휴대폰에서 열기**: Tailscale을 켠 상태로 `https://<서버>.ts.net:7443`을 엽니다. 아이디는 아무거나, 비밀번호는 ②에서 나온 것을 넣습니다.
+홈 화면에 추가해 두면 앱처럼 열 수 있습니다.
+
+| 하고 싶은 것 | 명령 |
+|---|---|
+| 최신 코드로 업데이트 | `/opt/agentorg/yt-studio/tools/yt-script-studio/update.sh` |
+| 비밀번호 다시 보기 | `grep APP_PASSWORD /opt/agentorg/yt-studio/tools/yt-script-studio/.env` |
+| 오류 로그 보기 | `cd /opt/agentorg/yt-studio/tools/yt-script-studio && docker compose logs --tail 50` |
+| 만든 대본 파일 목록 | `ls /opt/agentorg/yt-studio/tools/yt-script-studio/output` |
+| 잠시 끄기 / 다시 켜기 | `cd /opt/agentorg/yt-studio/tools/yt-script-studio && docker compose stop` / `docker compose start` |
+
+> 이 도구는 데이터베이스를 쓰지 않습니다. 결과 파일은 `output/` 폴더에만 저장됩니다.
 
 ## 개발자용
 

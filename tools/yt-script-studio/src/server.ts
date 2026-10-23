@@ -1,6 +1,7 @@
 // 유튜브 대본 스튜디오 — 로컬 웹 서버 (127.0.0.1 전용)
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -17,6 +18,18 @@ try {
 
 const PORT = Number(process.env.PORT || 7788);
 const HOST = process.env.HOST || "127.0.0.1";
+
+// APP_PASSWORD가 있으면 접속 시 비밀번호를 묻는다 (휴대폰·VM에서 쓸 때 API 키 보호). 아이디는 아무거나
+const PASSWORD = process.env.APP_PASSWORD || "";
+const sha = (s: string) => createHash("sha256").update(s).digest();
+function authorized(req: IncomingMessage): boolean {
+  if (!PASSWORD) return true;
+  const m = /^Basic (.+)$/.exec(req.headers.authorization ?? "");
+  if (!m) return false;
+  const decoded = Buffer.from(m[1], "base64").toString("utf8");
+  const pass = decoded.slice(decoded.indexOf(":") + 1);
+  return timingSafeEqual(sha(pass), sha(PASSWORD));
+}
 
 const STATIC: Record<string, [string, string]> = {
   "/": [path.join(ROOT, "public/index.html"), "text/html; charset=utf-8"],
@@ -107,6 +120,10 @@ async function run(req: IncomingMessage, res: ServerResponse) {
 
 const server = createServer(async (req, res) => {
   try {
+    if (!authorized(req)) {
+      res.writeHead(401, { "www-authenticate": 'Basic realm="yt-script-studio", charset="UTF-8"' });
+      return res.end("비밀번호가 필요합니다.");
+    }
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "POST" && url.pathname === "/api/run") return await run(req, res);
     if (req.method === "GET" && url.pathname === "/api/status") {
